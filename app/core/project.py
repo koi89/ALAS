@@ -1,7 +1,7 @@
 """
 ALAS — Project Model
-Modelo de proyecto: almacena estado, CRS, rutas, historial de procesamiento.
-Guardado y carga como JSON.
+Project model: stores state, CRS, paths, processing history.
+Save and load as JSON.
 """
 
 import json
@@ -15,8 +15,8 @@ from app.config import USER_CONFIG_DIR, USER_CONFIG_FILE
 
 @dataclass
 class ProjectSettings:
-    """Preferencias del proyecto actual."""
-    name: str = "Sin título"
+    """Current project preferences."""
+    name: str = "Untitled"
     crs_epsg: Optional[int] = None
     last_import_dir: str = ""
     last_export_dir: str = ""
@@ -27,7 +27,7 @@ class ProjectSettings:
 
 @dataclass
 class ProcessingHistoryEntry:
-    """Entrada del historial de procesamiento."""
+    """Processing history entry."""
     timestamp: str = ""
     operation: str = ""
     parameters: dict = field(default_factory=dict)
@@ -39,8 +39,8 @@ class ProcessingHistoryEntry:
 @dataclass
 class Project:
     """
-    Modelo completo del proyecto ALAS.
-    Gestiona estado, archivos cargados y historial.
+    Complete ALAS project model.
+    Manages state, loaded files and history.
     """
     settings: ProjectSettings = field(default_factory=ProjectSettings)
     loaded_files: list = field(default_factory=list)
@@ -57,7 +57,7 @@ class Project:
     def add_history(self, operation: str, parameters: dict,
                     input_file: str = "", output_file: str = "",
                     duration: float = 0.0):
-        """Añade una entrada al historial de procesamiento."""
+        """Add an entry to the processing history."""
         entry = ProcessingHistoryEntry(
             timestamp=datetime.now().isoformat(),
             operation=operation,
@@ -70,12 +70,12 @@ class Project:
         self.modified_at = datetime.now().isoformat()
 
     def save(self, path: Optional[str] = None):
-        """Guarda el proyecto como JSON."""
+        """Save the project as JSON."""
         save_path = Path(path) if path else (
             Path(self.project_file) if self.project_file else None
         )
         if save_path is None:
-            raise ValueError("No se ha especificado ruta para guardar.")
+            raise ValueError("No path specified for saving.")
 
         self.modified_at = datetime.now().isoformat()
         self.project_file = str(save_path)
@@ -95,7 +95,7 @@ class Project:
 
     @classmethod
     def load(cls, path: str) -> "Project":
-        """Carga un proyecto desde JSON."""
+        """Load a project from JSON."""
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
 
@@ -113,8 +113,8 @@ class Project:
 
 class UserPreferences:
     """
-    Preferencias globales del usuario (persisten entre proyectos).
-    Almacena último CRS, idioma, último directorio usado, etc.
+    Global user preferences (persist between projects).
+    Stores last CRS, language, last directory used, etc.
     """
 
     def __init__(self):

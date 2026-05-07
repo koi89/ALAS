@@ -1,6 +1,6 @@
 """
 ALAS — Layer Panel
-Panel de capas con árbol, visibilidad y menú contextual.
+Layer panel with tree, visibility, and context menu.
 """
 
 from PyQt6.QtWidgets import (
@@ -18,7 +18,7 @@ logger = get_logger("ui.layer_panel")
 
 
 class LayerPanel(QWidget):
-    """Panel de capas con QTreeWidget."""
+    """Layer panel with QTreeWidget."""
 
     zoom_to_layer_requested = pyqtSignal(int)
     export_layer_requested = pyqtSignal(int)
@@ -34,7 +34,7 @@ class LayerPanel(QWidget):
         layout.setContentsMargins(4, 4, 4, 4)
 
         self.tree = QTreeWidget()
-        self.tree.setHeaderLabels([tr("panel.layers"), "Tipo"])
+        self.tree.setHeaderLabels([tr("panel.layers"), tr("layer.type")])
         self.tree.header().setStretchLastSection(False)
         self.tree.header().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self.tree.header().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
@@ -66,12 +66,12 @@ class LayerPanel(QWidget):
 
         item = QTreeWidgetItem()
         item.setText(0, entry.name)
-        item.setText(1, "PC" if entry.is_point_cloud else "RL")
+        item.setText(1, tr("layer.pc") if entry.is_point_cloud else tr("layer.rl"))
         item.setCheckState(0, Qt.CheckState.Checked if entry.visible else Qt.CheckState.Unchecked)
         item.setData(0, Qt.ItemDataRole.UserRole, index)
         item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
 
-        # Color de tipo
+        # Type color
         if entry.is_point_cloud:
             item.setForeground(1, QBrush(QColor("#7c3aed")))
         else:
@@ -143,7 +143,7 @@ class LayerPanel(QWidget):
         if entry is None:
             return
         new_name, ok = QInputDialog.getText(
-            self, tr("layer.rename"), "Nombre:", text=entry.name
+            self, tr("layer.rename"), tr("layer.name_label"), text=entry.name
         )
         if ok and new_name.strip():
             self.layer_manager.rename_layer(index, new_name.strip())
@@ -154,7 +154,7 @@ class LayerPanel(QWidget):
             return
         reply = QMessageBox.question(
             self, tr("layer.remove"),
-            f"¿Eliminar capa '{entry.name}'?",
+            tr("layer.remove_confirm").format(entry.name),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if reply == QMessageBox.StandardButton.Yes:

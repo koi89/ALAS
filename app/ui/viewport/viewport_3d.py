@@ -1,6 +1,6 @@
 """
 ALAS — 3D Viewport
-Viewport 3D basado en PyVista QtInteractor para visualización de nubes de puntos.
+3D viewport based on PyVista QtInteractor for point cloud visualization.
 """
 
 import numpy as np
@@ -30,12 +30,12 @@ logger = get_logger("ui.viewport")
 
 class Viewport3D(QWidget):
     """
-    Widget de viewport 3D que envuelve PyVista QtInteractor.
-    Muestra nubes de puntos y superficies raster.
+    3D viewport widget wrapping PyVista QtInteractor.
+    Displays point clouds and raster surfaces.
     """
 
     point_picked = pyqtSignal(float, float, float)   # x, y, z
-    cursor_moved = pyqtSignal(float, float, float)    # coordenadas bajo cursor
+    cursor_moved = pyqtSignal(float, float, float)    # coordinates under cursor
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -48,18 +48,18 @@ class Viewport3D(QWidget):
         self._picked_points = []
         self._measuring_widget = None
         self._picking_callback = None
-        self._temp_actors = []       # Actores temporales (líneas, puntos de medida)
-        self._picking_active = False # Flag para desactivar remap de botones durante picking
+        self._temp_actors = []       # Temporary actors (lines, measurement points)
+        self._picking_active = False # Flag to disable button remap during picking
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        # Configurar PyVista
+        # Configure PyVista
         pv.global_theme.background = DEFAULT_BACKGROUND_COLOR
         pv.global_theme.font.color = "white"
         
-        # En Windows MSAA puede ser muy lento, usamos FXAA o desactivamos
+        # On Windows MSAA can be very slow, we use FXAA or disable it
         if sys.platform == "win32":
             pv.global_theme.anti_aliasing = "fxaa"
         else:
@@ -67,11 +67,11 @@ class Viewport3D(QWidget):
 
         self.plotter = QtInteractor(self)
         
-        # El Eye Dome Lighting es excelente pero pesado, lo habilitamos con parámetros optimizados
+        # Eye Dome Lighting is excellent but heavy, we enable it with optimized parameters
         self.plotter.enable_eye_dome_lighting() 
         layout.addWidget(self.plotter.interactor)
 
-        # Configurar interacción
+        # Configure interaction
         self.plotter.enable_trackball_style()
         self.plotter.interactor.installEventFilter(self)
 
@@ -80,7 +80,7 @@ class Viewport3D(QWidget):
         from PyQt6.QtGui import QMouseEvent
         from PyQt6.QtWidgets import QApplication
 
-        # No interceptar eventos si hay picking activo (área, distancia, puntos)
+        # No intercept events if there is picking active (area, distance, points)
         if self._picking_active:
             return super().eventFilter(obj, event)
 
@@ -131,38 +131,38 @@ class Viewport3D(QWidget):
                              colorize_by: str = None,
                              name: str = None):
         """
-        Muestra una nube de puntos en el viewport.
-        Si ya existe un actor con el mismo nombre, lo reemplaza.
+        Display a point cloud in the viewport.
+        If an actor with the same name exists, it replaces it.
         """
         if pc.xyz is None or pc.point_count == 0:
-            logger.warning("Nube vacía, nada que mostrar")
+            logger.warning("Empty cloud, nothing to display")
             return
 
         name = name or pc.name
         colorize_by = colorize_by or self._colorize_mode
 
-        # Decimado automático para rendimiento
+        # Automatic decimation for performance
         display_pc = pc
         if pc.point_count > MAX_VIEWPORT_POINTS:
             display_pc = pc.decimate_for_display(MAX_VIEWPORT_POINTS)
             logger.info(
-                f"Decimado automático: {pc.point_count:,} → "
-                f"{display_pc.point_count:,} puntos para visualización"
+                f"Automatic decimation: {pc.point_count:,} → "
+                f"{display_pc.point_count:,} points for visualization"
             )
 
-        # Crear mesh de puntos PyVista
+        # Create PyVista point cloud mesh
         points = display_pc.xyz.astype(np.float32)
         cloud = pv.PolyData(points)
 
-        # Generar colores
+        # Generate colors
         colors = self._generate_colors(display_pc, colorize_by)
         if colors is not None:
             cloud["RGB"] = colors
 
-        # Eliminar actor anterior si existe
+        # Remove previous actor if exists
         self._remove_actor(name)
 
-        # Añadir al plotter
+        # Add to plotter
         actor = self.plotter.add_mesh(
             cloud,
             scalars="RGB" if colors is not None else None,
@@ -175,19 +175,19 @@ class Viewport3D(QWidget):
         self._current_actors[name] = actor
 
         logger.info(
-            f"Mostrados {display_pc.point_count:,} puntos | "
+            f"Displayed {display_pc.point_count:,} points | "
             f"Color: {colorize_by}"
         )
 
     def update_colorization(self, pc: PointCloudData,
                               colorize_by: str, name: str = None):
-        """Actualiza la colorización de una nube ya mostrada."""
+        """Update the colorization of an already displayed cloud."""
         self._colorize_mode = colorize_by
         self.display_point_cloud(pc, colorize_by, name)
 
     def _generate_colors(self, pc: PointCloudData,
                           mode: str) -> Optional[np.ndarray]:
-        """Genera array RGB uint8 según el modo de colorización."""
+        """Generate RGB uint8 array according to colorization mode."""
         try:
             if mode == COLORIZE_HEIGHT:
                 return colorize_by_height(pc.xyz[:, 2])
@@ -202,10 +202,10 @@ class Viewport3D(QWidget):
             elif mode == COLORIZE_SINGLE:
                 return colorize_single(pc.point_count)
             else:
-                # Fallback: color por altura
+                # Fallback: color by height
                 return colorize_by_height(pc.xyz[:, 2])
         except Exception as e:
-            logger.error(f"Error en colorización ({mode}): {e}")
+            logger.error(f"Error in colorization ({mode}): {e}")
             return colorize_by_height(pc.xyz[:, 2])
 
     # ------------------------------------------------------------------
@@ -214,7 +214,7 @@ class Viewport3D(QWidget):
 
     def display_raster_surface(self, raster: RasterLayer, name: str = None):
         """
-        Muestra un raster como superficie 3D (StructuredGrid).
+        Display a raster as a 3D surface (StructuredGrid).
         """
         if not raster.is_loaded:
             return
@@ -230,7 +230,7 @@ class Viewport3D(QWidget):
 
         xmin, ymin, xmax, ymax = bounds
         x = np.linspace(xmin, xmax, cols)
-        y = np.linspace(ymax, ymin, rows)  # Y invertido en rasters
+        y = np.linspace(ymax, ymin, rows)  # Y inverted in rasters
         xx, yy = np.meshgrid(x, y)
 
         terrain_arr = getattr(raster, "flood_terrain_arr", None)
@@ -285,7 +285,7 @@ class Viewport3D(QWidget):
             del self._current_actors[name]
 
     def remove_layer(self, name: str):
-        """Elimina un actor por nombre."""
+        """Remove an actor by name."""
         self._remove_actor(name)
         self.plotter.render()
 
@@ -296,7 +296,7 @@ class Viewport3D(QWidget):
             self.plotter.render()
 
     def clear_all(self):
-        """Elimina todos los actores."""
+        """Remove all actors."""
         self.plotter.clear()
         self._current_actors.clear()
 
@@ -321,7 +321,7 @@ class Viewport3D(QWidget):
         self.plotter.render()
 
     def zoom_to_bounds(self, bounds):
-        """Zoom a una extensión específica."""
+        """Zoom to a specific extent."""
         if bounds is None:
             return
         if len(bounds) == 6:
@@ -351,10 +351,10 @@ class Viewport3D(QWidget):
     # ------------------------------------------------------------------
 
     def take_screenshot(self, path: str = None) -> Optional[np.ndarray]:
-        """Captura el viewport actual. Devuelve array o guarda a archivo."""
+        """Capture the current viewport. Returns array or saves to file."""
         if path:
             self.plotter.screenshot(path)
-            logger.info(f"Captura guardada: {path}")
+            logger.info(f"Screenshot saved: {path}")
             return None
         return self.plotter.screenshot(return_img=True)
 
@@ -363,8 +363,8 @@ class Viewport3D(QWidget):
     # ------------------------------------------------------------------
 
     def enable_point_picking(self, callback=None):
-        """Habilita la selección de puntos en el viewport."""
-        logger.info("Habilitando selección de puntos...")
+        """Enable point picking in the viewport."""
+        logger.info("Enabling point picking...")
         self.disable_tools()
         self._picking_active = True
         self._picking_callback = callback
@@ -377,17 +377,17 @@ class Viewport3D(QWidget):
             use_picker=True,
             left_clicking=True
         )
-        logger.info("Selección de puntos lista. Haz clic izquierdo en los puntos.")
+        logger.info("Point picking ready. Left-click on points.")
 
     def _on_point_picked(self, point):
-        """Callback cuando se selecciona un punto."""
-        logger.debug(f"Evento de picking disparado. Punto: {point}")
+        """Callback when a point is picked."""
+        logger.debug(f"Picking event triggered. Point: {point}")
         if point is None:
-            logger.warning("Picking disparado pero no se encontró ningún punto.")
+            logger.warning("Picking triggered but no point found.")
             return
 
         x, y, z = point
-        logger.info(f"Punto detectado: X={x:.3f}, Y={y:.3f}, Z={z:.3f}")
+        logger.info(f"Point detected: X={x:.3f}, Y={y:.3f}, Z={z:.3f}")
 
         sphere = pv.Sphere(radius=0.2, center=point)
         actor = self.plotter.add_mesh(
@@ -398,11 +398,11 @@ class Viewport3D(QWidget):
 
         self.point_picked.emit(x, y, z)
         if self._picking_callback:
-            logger.debug("Llamando al callback de la herramienta...")
+            logger.debug("Calling tool callback...")
             self._picking_callback(x, y, z)
 
     def add_temporary_line(self, p1, p2, color="#ffff00"):
-        """Dibuja una linea temporal resaltada entre dos puntos."""
+        """Draw a highlighted temporary line between two points."""
         line = pv.Line(p1, p2)
         actor = self.plotter.add_mesh(
             line,
@@ -423,8 +423,8 @@ class Viewport3D(QWidget):
 
     def add_measurement_marker(self, p):
         """
-        Marca un punto de medicion con el mismo estilo que la herramienta de area:
-        esfera negra de 14px.
+        Mark a measurement point with the same style as the area tool:
+        black sphere of 14px.
         """
         pts = pv.PolyData([list(p)])
         actor = self.plotter.add_mesh(
@@ -440,8 +440,8 @@ class Viewport3D(QWidget):
 
     def add_measurement_line(self, p1, p2):
         """
-        Dibuja una linea de medicion con el mismo estilo que la herramienta de area:
-        negra, line_width=3, sin tubes.
+        Draw a measurement line with the same style as the area tool:
+        black, line_width=3, no tubes.
         """
         line = pv.Line(p1, p2)
         actor = self.plotter.add_mesh(
@@ -456,18 +456,18 @@ class Viewport3D(QWidget):
         return actor
 
     def enable_distance_tool(self):
-        """Habilita la herramienta de medicion de distancia."""
+        """Enable the distance measurement tool."""
         self.disable_tools()
         self._picking_active = True
         self._measuring_widget = self.plotter.add_measurement_widget(color="#000000")
-        logger.info("Herramienta de distancia habilitada")
+        logger.info("Distance tool enabled")
 
     def enable_world_picking(self, callback):
         """
-        Habilita picking de coordenadas de mundo mediante vtkWorldPointPicker.
-        Usa el mismo mecanismo que la herramienta de area: lee del Z-buffer
-        con O(1), no requiere que el clic aterrice sobre la geometria.
-        callback(x, y, z) se llama en cada clic.
+        Enable world coordinate picking via vtkWorldPointPicker.
+        Uses the same mechanism as the area tool: reads from Z-buffer
+        with O(1), does not require click to land on geometry.
+        callback(x, y, z) is called on each click.
         """
         import vtk as _vtk
         self.disable_tools()
@@ -508,16 +508,16 @@ class Viewport3D(QWidget):
 
     def enable_area_tool(self, on_vertex_added=None):
         """
-        Habilita la herramienta de área.
+        Enable the area tool.
 
-        Rendimiento:
-        - vtkWorldPointPicker: O(1) — lee el Z-buffer, NO traversa la geometría.
-        - Un único actor PolyData para todos los vértices (puntos grandes).
-        - Un único actor PolyData para todas las líneas, actualizado en cada clic.
-        - Click vs drag: si el ratón se mueve < 5 px entre press y release = clic.
+        Performance:
+        - vtkWorldPointPicker: O(1) — reads the Z-buffer, does NOT traverse geometry.
+        - Single PolyData actor for all vertices (large points).
+        - Single PolyData actor for all lines, updated on each click.
+        - Click vs drag: if mouse moves < 5 px between press and release = click.
         """
         import vtk as _vtk
-        logger.info("Habilitando herramienta de área...")
+        logger.info("Enabling area tool...")
         self.disable_tools()
         self._picking_active = True
         self._area_vertices: list = []
@@ -525,9 +525,9 @@ class Viewport3D(QWidget):
         self._area_markers_actor = None
         self._area_lines_actor   = None
 
-        # WorldPointPicker: instantáneo, usa depth buffer
+        # WorldPointPicker: instant, uses depth buffer
         wp_picker = _vtk.vtkWorldPointPicker()
-        self._area_picker = wp_picker  # mantener referencia viva
+        self._area_picker = wp_picker  # keep reference alive
 
         iren = self.plotter.iren.interactor
 
@@ -544,10 +544,10 @@ class Viewport3D(QWidget):
                 return
             dx = release_pos[0] - press_pos[0]
             dy = release_pos[1] - press_pos[1]
-            if (dx * dx + dy * dy) > 25:   # > 5 px → arrastre, no clic
+            if (dx * dx + dy * dy) > 25:   # > 5 px → drag, not click
                 return
 
-            # Pick O(1): desprojecta las coordenadas de pantalla usando el Z-buffer
+            # Pick O(1): deproject screen coordinates using Z-buffer
             wp_picker.Pick(press_pos[0], press_pos[1], 0, self.plotter.renderer)
             p = wp_picker.GetPickPosition()
             x, y, z = float(p[0]), float(p[1]), float(p[2])
@@ -555,7 +555,7 @@ class Viewport3D(QWidget):
             self._area_vertices.append((x, y, z))
             pts = np.array(self._area_vertices, dtype=np.float32)
 
-            # --- Actor de vértices: un único PolyData con puntos grandes ---
+            # --- Vertices actor: single PolyData with large points ---
             markers = pv.PolyData(pts)
             if self._area_markers_actor is not None:
                 self.plotter.remove_actor(self._area_markers_actor)
@@ -568,7 +568,7 @@ class Viewport3D(QWidget):
                 reset_camera=False,
             )
 
-            # --- Actor de líneas: un único PolyData con segmentos ---
+            # --- Lines actor: single PolyData with segments ---
             if len(self._area_vertices) >= 2:
                 n = len(pts)
                 cells = np.empty((n - 1) * 3, dtype=np.int_)
@@ -589,7 +589,7 @@ class Viewport3D(QWidget):
                 )
 
             self.plotter.render()
-            logger.debug(f"Área — vértice {len(self._area_vertices)}: ({x:.2f}, {y:.2f}, {z:.2f})")
+            logger.debug(f"Area — vertex {len(self._area_vertices)}: ({x:.2f}, {y:.2f}, {z:.2f})")
 
             if on_vertex_added:
                 on_vertex_added(x, y, z)
@@ -599,15 +599,15 @@ class Viewport3D(QWidget):
         self._area_obs_release = style.AddObserver("LeftButtonReleaseEvent", _on_release)
         self._area_style_ref   = style
 
-        logger.info("Herramienta de área lista. Haz clic para añadir vértices.")
+        logger.info("Area tool ready. Click to add vertices.")
 
     def draw_closing_line(self):
-        """Añade la línea de cierre del polígono al actor de líneas existente."""
+        """Add the polygon closing line to the existing lines actor."""
         if not hasattr(self, "_area_vertices") or len(self._area_vertices) < 3:
             return
         pts = np.array(self._area_vertices, dtype=np.float32)
         n = len(pts)
-        # Líneas: 0-1, 1-2, ..., (n-1)-0  (cierre)
+        # Lines: 0-1, 1-2, ..., (n-1)-0  (closing)
         cells = np.empty(n * 3, dtype=np.int_)
         cells[0::3] = 2
         cells[1::3] = np.arange(n)
@@ -622,7 +622,7 @@ class Viewport3D(QWidget):
             reset_camera=False,
         )
     def clear_volume_graphics(self):
-        """Limpia únicamente el sólido 3D del volumen coloreado."""
+        """Clear only the colored 3D solid of the volume."""
         if hasattr(self, "_volume_solid_actor") and self._volume_solid_actor is not None:
             try:
                 self.plotter.remove_actor(self._volume_solid_actor)
@@ -634,11 +634,11 @@ class Viewport3D(QWidget):
         self.plotter.render()
 
     def display_volume_region(self, grid_x: np.ndarray, grid_y: np.ndarray, grid_z: np.ndarray, reference_z: float):
-        """Dibuja el bloque 3D sólido correspondiente al volumen calculado."""
+        """Draw the 3D solid block corresponding to the calculated volume."""
         self.clear_volume_graphics()
         try:
-            # 1. Preparar capas superior e inferior
-            # Rellenar NaNs temporalmente para construir el grid estructurado
+            # 1. Prepare top and bottom layers
+            # Temporarily fill NaNs to build the structured grid
             z_terrain = grid_z.copy()
             valid_mask = ~np.isnan(z_terrain)
             
@@ -648,33 +648,33 @@ class Viewport3D(QWidget):
             z_terrain[~valid_mask] = reference_z
             z_ref_layer = np.full_like(z_terrain, reference_z)
 
-            # 2. Crear las matrices 3D apilando las dos capas (terreno y referencia)
+            # 2. Create the 3D matrices by stacking the two layers (terrain and reference)
             x3d = np.dstack((grid_x, grid_x))
             y3d = np.dstack((grid_y, grid_y))
             z3d = np.dstack((z_terrain, z_ref_layer))
 
             grid = pv.StructuredGrid(x3d, y3d, z3d)
 
-            # 3. Calcular la diferencia y clasificar: Corte (1), Relleno (-1)
+            # 3. Calculate difference and classify: Cut (1), Fill (-1)
             diff_2d = z_terrain - reference_z
             diff_3d = np.dstack((diff_2d, diff_2d))
             category_3d = np.where(diff_3d > 0, 1, -1)
 
-            # 4. Máscara de celdas válidas (solo las que estaban dentro del polígono)
+            # 4. Valid cells mask (only cells that were inside the polygon)
             valid_3d = np.dstack((valid_mask, valid_mask)).astype(float)
 
-            # Asignar escalares a los puntos del grid (orden Flatten Fortran para X,Y,Z de PyVista)
+            # Assign scalars to grid points (Flatten Fortran order for X,Y,Z of PyVista)
             grid["Category"] = category_3d.flatten(order="F")
             grid["Valid"] = valid_3d.flatten(order="F")
 
-            # 5. Extraer solo las celdas válidas usando un threshold
+            # 5. Extract only valid cells using a threshold
             solid_volume = grid.threshold(0.5, scalars="Valid")
 
             if solid_volume.n_points == 0:
                 return
 
             from matplotlib.colors import ListedColormap
-            cmap = ListedColormap(["#3b82f6", "#ef4444"]) # Azul (Relleno), Rojo (Corte)
+            cmap = ListedColormap(["#3b82f6", "#ef4444"]) # Blue (Fill), Red (Cut)
 
             actor = self.plotter.add_mesh(
                 solid_volume,
@@ -688,19 +688,19 @@ class Viewport3D(QWidget):
             self._temp_actors.append(actor)
             self._volume_solid_actor = actor
         except Exception as e:
-            logger.error(f"Error generando volumen 3D sólido: {e}")
+            logger.error(f"Error generating 3D volume solid: {e}")
 
         self.plotter.render()
 
     def clear_temporary_graphics(self):
-        """Limpia líneas y puntos de selección temporales."""
+        """Clear temporary selection lines and points."""
         for actor in self._temp_actors:
             try:
                 self.plotter.remove_actor(actor)
             except Exception:
                 pass
         self._temp_actors = []
-        # Limpiar actores del área tool
+        # Clear area tool actors
         for attr in ("_area_markers_actor", "_area_lines_actor"):
             actor = getattr(self, attr, None)
             if actor is not None:
@@ -712,9 +712,9 @@ class Viewport3D(QWidget):
         self.plotter.render()
 
     def disable_tools(self):
-        """Deshabilita herramientas interactivas y limpia widgets."""
+        """Disable interactive tools and clean up widgets."""
         self._picking_active = False
-        # Eliminar observadores VTK del area tool
+        # Remove VTK observers from area tool
         style_ref = getattr(self, "_area_style_ref", None)
         if style_ref is not None:
             for obs_attr in ("_area_obs_press", "_area_obs_release"):
@@ -726,7 +726,7 @@ class Viewport3D(QWidget):
                         pass
                     setattr(self, obs_attr, None)
             self._area_style_ref = None
-        # Eliminar observadores VTK del world picker (distancia, perfil...)
+        # Remove VTK observers from world picker (distance, profile...)
         wp_style = getattr(self, "_wp_style_ref", None)
         if wp_style is not None:
             for obs_attr in ("_wp_obs_press", "_wp_obs_release"):
@@ -747,7 +747,7 @@ class Viewport3D(QWidget):
                 pass
             self._measuring_widget = None
         self._picking_callback = None
-        logger.info("Herramientas interactivas deshabilitadas")
+        logger.info("Interactive tools disabled")
 
     # ------------------------------------------------------------------
     # Cleanup

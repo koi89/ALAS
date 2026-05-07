@@ -1,6 +1,6 @@
 """
 ALAS — DEM Generator
-Generación de MDT, MDS y CHM a partir de nubes de puntos clasificadas.
+Generation of DEM, DSM and CHM from classified point clouds.
 """
 
 import numpy as np
@@ -22,36 +22,36 @@ logger = get_logger("processing.dem_generator")
 def generate_dtm(pc: PointCloudData, resolution: float = None,
                  method: str = None, power: float = None) -> RasterLayer:
     """
-    Genera un MDT (Modelo Digital del Terreno) solo con puntos de suelo.
+    Generates a DTM (Digital Terrain Model) using only ground points.
     """
     resolution = resolution or DEFAULT_DEM_RESOLUTION
     method = method or DEFAULT_INTERPOLATION_METHOD
     power = power or DEFAULT_IDW_POWER
 
-    logger.info(f"Generando MDT: res={resolution}m, método={method}")
+    logger.info(f"Generating DTM: res={resolution}m, method={method}")
 
-    # Extraer solo puntos de suelo
+    # Extract only ground points
     ground = pc.get_ground_points()
     if ground.point_count == 0:
-        raise ValueError("No hay puntos de suelo clasificados. Ejecuta la clasificación primero.")
+        raise ValueError("No classified ground points. Run classification first.")
 
     return _points_to_raster(
         ground.xyz, resolution, method, power,
-        name="MDT", epsg=pc.crs_epsg
+        name="DTM", epsg=pc.crs_epsg
     )
 
 
 def generate_dsm(pc: PointCloudData, resolution: float = None,
                  method: str = None) -> RasterLayer:
     """
-    Genera un MDS (Modelo Digital de Superficie) con primeros retornos.
+    Generates a DSM (Digital Surface Model) using first returns.
     """
     resolution = resolution or DEFAULT_DEM_RESOLUTION
     method = method or DEFAULT_INTERPOLATION_METHOD
 
-    logger.info(f"Generando MDS: res={resolution}m, método={method}")
+    logger.info(f"Generating DSM: res={resolution}m, method={method}")
 
-    # Usar primeros retornos si están disponibles, sino todos los puntos
+    # Use first returns if available, otherwise all points
     if pc.return_number is not None:
         try:
             first_returns = pc.get_first_returns()
@@ -61,39 +61,39 @@ def generate_dsm(pc: PointCloudData, resolution: float = None,
     else:
         points = pc.xyz
 
-    # Para MDS, usar el punto más alto en cada celda (máximo)
+    # For DSM, use the highest point in each cell (maximum)
     return _points_to_raster_max(
         points, resolution,
-        name="MDS", epsg=pc.crs_epsg
+        name="DSM", epsg=pc.crs_epsg
     )
 
 
 def generate_chm(dtm: RasterLayer, dsm: RasterLayer,
                  name: str = "CHM") -> RasterLayer:
     """
-    Genera un CHM (Canopy Height Model) = MDS - MDT.
+    Generates a CHM (Canopy Height Model) = DSM - DTM.
     """
-    logger.info("Generando CHM (MDS - MDT)")
+    logger.info("Generating CHM (DSM - DTM)")
 
     dtm_data = dtm.get_band(0)
     dsm_data = dsm.get_band(0)
 
-    # Verificar dimensiones compatibles
+    # Verify compatible dimensions
     if dtm_data.shape != dsm_data.shape:
-        # Resamplear al más pequeño
+        # Resample to the smaller one
         min_rows = min(dtm_data.shape[0], dsm_data.shape[0])
         min_cols = min(dtm_data.shape[1], dsm_data.shape[1])
         dtm_data = dtm_data[:min_rows, :min_cols]
         dsm_data = dsm_data[:min_rows, :min_cols]
-        logger.warning(f"Recortando a {min_cols}x{min_rows} px")
+        logger.warning(f"Cropping to {min_cols}x{min_rows} px")
 
-    # Calcular diferencia
+    # Calculate difference
     chm = dsm_data - dtm_data
 
-    # Valores negativos → 0 (artefactos)
+    # Negative values → 0 (artifacts)
     chm[chm < 0] = 0
 
-    # Nodata donde cualquiera sea nodata
+    # Nodata where either is nodata
     nodata_mask = (dtm_data == dtm.nodata) | (dsm_data == dsm.nodata)
     chm[nodata_mask] = DEFAULT_NODATA
 
@@ -104,7 +104,7 @@ def generate_chm(dtm: RasterLayer, dsm: RasterLayer,
 
     stats = result.statistics()
     logger.info(
-        f"CHM generado: rango {stats.get('min', 0):.1f} - "
+        f"CHM generated: range {stats.get('min', 0):.1f} - "
         f"{stats.get('max', 0):.1f} m"
     )
     return result
@@ -114,12 +114,12 @@ def _points_to_raster(points: np.ndarray, resolution: float,
                        method: str, power: float,
                        name: str = "raster",
                        epsg: int = None) -> RasterLayer:
-    """Interpola puntos a un grid regular."""
+    """Interpolates points to a regular grid."""
     x = points[:, 0]
     y = points[:, 1]
     z = points[:, 2]
 
-    # Crear grid
+    # Create grid
     xmin, xmax = x.min(), x.max()
     ymin, ymax = y.min(), y.max()
 
@@ -127,9 +127,9 @@ def _points_to_raster(points: np.ndarray, resolution: float,
     rows = int(np.ceil((ymax - ymin) / resolution))
 
     if cols <= 0 or rows <= 0:
-        raise ValueError("La extensión de la nube es demasiado pequeña.")
+        raise ValueError("Cloud extent is too small.")
 
-    logger.info(f"Grid: {cols}x{rows} celdas ({resolution}m/px)")
+    logger.info(f"Grid: {cols}x{rows} cells ({resolution}m/px)")
 
     xi = np.linspace(xmin + resolution / 2, xmax - resolution / 2, cols)
     yi = np.linspace(ymax - resolution / 2, ymin + resolution / 2, rows)
@@ -158,7 +158,7 @@ def _points_to_raster(points: np.ndarray, resolution: float,
 
     stats = result.statistics()
     logger.info(
-        f"{name} generado: {cols}x{rows}px | "
+        f"{name} generated: {cols}x{rows}px | "
         f"Z: {stats.get('min', 0):.1f} - {stats.get('max', 0):.1f} m"
     )
     return result
@@ -168,8 +168,8 @@ def _points_to_raster_max(points: np.ndarray, resolution: float,
                             name: str = "raster",
                             epsg: int = None) -> RasterLayer:
     """
-    Rasteriza puntos usando el valor máximo Z en cada celda.
-    Para MDS (superficie, punto más alto gana).
+    Rasterizes points using the maximum Z value in each cell.
+    For DSM (surface, highest point wins).
     """
     x = points[:, 0]
     y = points[:, 1]
@@ -182,21 +182,21 @@ def _points_to_raster_max(points: np.ndarray, resolution: float,
     rows = int(np.ceil((ymax - ymin) / resolution))
 
     if cols <= 0 or rows <= 0:
-        raise ValueError("Extensión demasiado pequeña.")
+        raise ValueError("Extent too small.")
 
     grid_z = np.full((rows, cols), DEFAULT_NODATA, dtype=np.float32)
 
-    # Asignar cada punto a su celda
+    # Assign each point to its cell
     col_idx = np.clip(((x - xmin) / resolution).astype(int), 0, cols - 1)
     row_idx = np.clip(((ymax - y) / resolution).astype(int), 0, rows - 1)
 
-    # Usar máximo por celda
+    # Use maximum per cell
     for i in range(len(z)):
         r, c = row_idx[i], col_idx[i]
         if grid_z[r, c] == DEFAULT_NODATA or z[i] > grid_z[r, c]:
             grid_z[r, c] = z[i]
 
-    # Rellenar huecos con interpolación nearest
+    # Fill gaps with nearest interpolation
     nodata_mask = grid_z == DEFAULT_NODATA
     if nodata_mask.any() and not nodata_mask.all():
         valid_mask = ~nodata_mask
@@ -220,7 +220,7 @@ def _idw_interpolation(x, y, z, xx, yy, power: float = 2.0,
     tree = cKDTree(points_xy)
     distances, indices = tree.query(grid_points, k=k)
 
-    # Evitar div por 0
+    # Avoid division by 0
     distances = np.maximum(distances, 1e-10)
 
     weights = 1.0 / (distances ** power)

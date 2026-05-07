@@ -1,6 +1,6 @@
 """
 ALAS — Layer Manager
-Gestor de capas: nubes de puntos y rasters con señales Qt.
+Layer manager: point clouds and rasters with Qt signals.
 """
 
 from typing import Optional, Union, List
@@ -16,7 +16,7 @@ LayerType = Union[PointCloudData, RasterLayer]
 
 
 class LayerEntry:
-    """Entrada individual en el gestor de capas."""
+    """Individual entry in the layer manager."""
 
     def __init__(self, layer: LayerType, visible: bool = True):
         self.layer = layer
@@ -49,8 +49,8 @@ class LayerEntry:
 
 class LayerManager(QObject):
     """
-    Gestor centralizado de capas.
-    Emite señales cuando cambia la lista, visibilidad o capa activa.
+    Centralized layer manager.
+    Emits signals when list, visibility or active layer changes.
     """
 
     # Signals
@@ -59,7 +59,7 @@ class LayerManager(QObject):
     layer_moved = pyqtSignal(int, int)           # from_idx, to_idx
     layer_renamed = pyqtSignal(int, str)         # index, new_name
     layer_visibility_changed = pyqtSignal(int, bool)  # index, visible
-    active_layer_changed = pyqtSignal(int)       # index (-1 = ninguna)
+    active_layer_changed = pyqtSignal(int)       # index (-1 = none)
     layers_cleared = pyqtSignal()
 
     def __init__(self, parent=None):
@@ -97,12 +97,12 @@ class LayerManager(QObject):
     # ------------------------------------------------------------------
 
     def add_layer(self, layer: LayerType, make_active: bool = True) -> int:
-        """Añade una capa y devuelve su índice."""
+        """Add a layer and return its index."""
         entry = LayerEntry(layer)
         self._layers.append(entry)
         idx = len(self._layers) - 1
 
-        logger.info(f"Capa añadida [{idx}]: {entry.name} ({entry.layer_type_str})")
+        logger.info(f"Layer added [{idx}]: {entry.name} ({entry.layer_type_str})")
         self.layer_added.emit(idx)
 
         if make_active:
@@ -111,16 +111,16 @@ class LayerManager(QObject):
         return idx
 
     def remove_layer(self, index: int):
-        """Elimina una capa por índice."""
+        """Remove a layer by index."""
         if not (0 <= index < len(self._layers)):
             return
         name = self._layers[index].name
         self._layers.pop(index)
 
-        logger.info(f"Capa eliminada [{index}]: {name}")
+        logger.info(f"Layer removed [{index}]: {name}")
         self.layer_removed.emit(index)
 
-        # Ajustar índice activo
+        # Adjust active index
         if self._active_index == index:
             new_idx = min(index, len(self._layers) - 1)
             self._active_index = new_idx
@@ -129,18 +129,18 @@ class LayerManager(QObject):
             self._active_index -= 1
 
     def clear(self):
-        """Elimina todas las capas."""
+        """Remove all layers."""
         self._layers.clear()
         self._active_index = -1
         self.layers_cleared.emit()
-        logger.info("Todas las capas eliminadas")
+        logger.info("All layers removed")
 
     # ------------------------------------------------------------------
     # Active layer
     # ------------------------------------------------------------------
 
     def set_active(self, index: int):
-        """Establece la capa activa."""
+        """Set the active layer."""
         if 0 <= index < len(self._layers):
             self._active_index = index
             self.active_layer_changed.emit(index)
@@ -150,7 +150,7 @@ class LayerManager(QObject):
     # ------------------------------------------------------------------
 
     def set_visibility(self, index: int, visible: bool):
-        """Cambia la visibilidad de una capa."""
+        """Change the visibility of a layer."""
         if 0 <= index < len(self._layers):
             self._layers[index].visible = visible
             self.layer_visibility_changed.emit(index, visible)
@@ -177,7 +177,7 @@ class LayerManager(QObject):
         self._layers.insert(to_idx, entry)
         self.layer_moved.emit(from_idx, to_idx)
 
-        # Ajustar activo
+        # Adjust active
         if self._active_index == from_idx:
             self._active_index = to_idx
         elif from_idx < self._active_index <= to_idx:
@@ -217,10 +217,10 @@ class LayerManager(QObject):
         return None
 
     def replace_layer(self, index: int, new_layer: LayerType):
-        """Reemplaza los datos de una capa existente (mantiene posición y visibilidad)."""
+        """Replace the data of an existing layer (keeps position and visibility)."""
         if 0 <= index < len(self._layers):
             old_name = self._layers[index].name
             self._layers[index].layer = new_layer
-            if new_layer.name == "Sin nombre":
+            if new_layer.name == "Unnamed":
                 new_layer.name = old_name
-            logger.info(f"Capa [{index}] actualizada: {new_layer.name}")
+            logger.info(f"Layer [{index}] updated: {new_layer.name}")

@@ -1,6 +1,6 @@
 """
 ALAS — I/O Handler
-Lectura y escritura de archivos LAS/LAZ con laspy y PDAL.
+Reading and writing LAS/LAZ files with laspy and PDAL.
 """
 
 import json
@@ -15,19 +15,19 @@ logger = get_logger("processing.io")
 
 
 def read_las(path: str) -> PointCloudData:
-    """Lee un archivo LAS/LAZ usando laspy."""
+    """Reads a LAS/LAZ file using laspy."""
     return PointCloudData.from_file(path)
 
 
 def write_las(pc: PointCloudData, path: str, compress: bool = True):
-    """Escribe un archivo LAS/LAZ."""
+    """Writes a LAS/LAZ file."""
     pc.to_file(path, compress=compress)
 
 
 def read_with_pdal(path: str, extra_stages: list = None) -> np.ndarray:
     """
-    Lee un archivo usando un pipeline PDAL.
-    Devuelve un array NumPy estructurado.
+    Reads a file using a PDAL pipeline.
+    Returns a structured NumPy array.
     """
     import pdal
 
@@ -38,7 +38,7 @@ def read_with_pdal(path: str, extra_stages: list = None) -> np.ndarray:
     pipeline_json = json.dumps(pipeline_stages)
     pipeline = pdal.Pipeline(pipeline_json)
     count = pipeline.execute()
-    logger.info(f"PDAL procesó {count:,} puntos de {Path(path).name}")
+    logger.info(f"PDAL processed {count:,} points from {Path(path).name}")
 
     arrays = pipeline.arrays
     if arrays:
@@ -48,15 +48,15 @@ def read_with_pdal(path: str, extra_stages: list = None) -> np.ndarray:
 
 def pdal_pipeline_execute(stages: list) -> np.ndarray:
     """
-    Ejecuta un pipeline PDAL arbitrario.
-    stages: lista de diccionarios de etapas PDAL.
+    Executes an arbitrary PDAL pipeline.
+    stages: list of PDAL stage dictionaries.
     """
     import pdal
 
     pipeline_json = json.dumps(stages)
     pipeline = pdal.Pipeline(pipeline_json)
     count = pipeline.execute()
-    logger.info(f"Pipeline PDAL ejecutado: {count:,} puntos")
+    logger.info(f"PDAL pipeline executed: {count:,} points")
 
     arrays = pipeline.arrays
     if arrays:
@@ -65,12 +65,12 @@ def pdal_pipeline_execute(stages: list) -> np.ndarray:
 
 
 def get_file_info(path: str) -> dict:
-    """Obtiene información básica de un archivo LAS/LAZ sin leer todos los puntos."""
+    """Gets basic information from a LAS/LAZ file without reading all points."""
     import laspy
 
     with laspy.open(str(path)) as reader:
         header = reader.header
-        # system_identifier puede ser bytes o str según versión de laspy
+        # system_identifier can be bytes or str depending on laspy version
         sys_id = header.system_identifier
         if isinstance(sys_id, bytes):
             system_id = sys_id.decode('utf-8', errors='ignore').strip()
@@ -91,6 +91,6 @@ def get_file_info(path: str) -> dict:
 
 
 def merge_files(paths: List[str]) -> PointCloudData:
-    """Fusiona múltiples archivos LAS/LAZ."""
+    """Merges multiple LAS/LAZ files."""
     clouds = [PointCloudData.from_file(p) for p in paths]
     return PointCloudData.merge(clouds, "merged")

@@ -1,6 +1,6 @@
 """
 ALAS — Analysis Dialog
-Diálogo unificado de análisis con pestañas: geomorfología, hidrología, vegetación, multitemporal.
+Unified analysis dialog with tabs: geomorphology, hydrology, vegetation, multitemporal.
 """
 
 from PyQt6.QtWidgets import (
@@ -21,11 +21,11 @@ logger = get_logger("ui.analysis_dialog")
 
 
 class HydroResultsWindow(QMainWindow):
-    """Ventana para mostrar resultados hidrológicos como imágenes con leyendas."""
+    """Window to display hydrological results as images with legends."""
 
     def __init__(self, results: dict, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Resultados Hidrológicos")
+        self.setWindowTitle(tr("analysis.hydro_results"))
         self.setMinimumSize(1000, 800)
         self._setup_ui(results)
 
@@ -45,16 +45,16 @@ class HydroResultsWindow(QMainWindow):
                 pixmap = QPixmap.fromImage(qimage)
                 pixmap = pixmap.scaledToWidth(800, Qt.TransformationMode.SmoothTransformation)
 
-                grp = QGroupBox(f"Resultado: {layer_type}")
+                grp = QGroupBox(tr("analysis.result").format(layer_type))
                 grp_layout = QVBoxLayout(grp)
                 
-                # Imagen
+                # Image
                 lbl_img = QLabel()
                 lbl_img.setPixmap(pixmap)
                 lbl_img.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 grp_layout.addWidget(lbl_img)
 
-                # Leyenda según tipo
+                # Legend according to type
                 legend_text = self._get_legend_text(layer_type, raster_layer)
                 lbl_legend = QLabel(legend_text)
                 lbl_legend.setTextFormat(Qt.TextFormat.RichText)
@@ -65,7 +65,7 @@ class HydroResultsWindow(QMainWindow):
                 layout.addWidget(grp)
 
             except Exception as e:
-                logger.error(f"Error renderizando {layer_type}: {e}")
+                logger.error(f"Error rendering {layer_type}: {e}")
 
         layout.addStretch()
         scroll.setWidget(container)
@@ -73,7 +73,7 @@ class HydroResultsWindow(QMainWindow):
 
     @staticmethod
     def _get_legend_text(layer_type: str, raster_layer=None) -> str:
-        """Devuelve el texto de leyenda según el tipo de análisis."""
+        """Return the legend text according to the analysis type."""
         sq = "font-size: 15px;"
 
         if layer_type == "rainfall_runoff" and raster_layer is not None:
@@ -87,12 +87,12 @@ class HydroResultsWindow(QMainWindow):
                 if arr.ndim > 2:
                     arr = arr[0]
                 return (
-                    f"<b>Escorrentía por Precipitaciones — {rainfall_mm_h} mm/h</b><br>"
-                    f"• <span style='color: #e8f4fd; {sq}'>■</span> Débil (&lt; 1 mm/h) | "
-                    f"<span style='color: #2196f3; {sq}'>■</span> Moderado (1–10 mm/h) | "
-                    f"<span style='color: #0d47a1; {sq}'>■</span> Fuerte (10–50 mm/h) | "
-                    f"<span style='color: #1a237e; {sq}'>■</span> Extremo (&gt; 50 mm/h)<br>"
-                    f"• Escala 1–150 mm/h."
+                    f"<b>{tr('hydro.legend_runoff_title').format(rainfall_mm_h)}</b><br>"
+                    f"• <span style='color: #e8f4fd; {sq}'>■</span> {tr('legend.weak')} (&lt; 1 mm/h) | "
+                    f"<span style='color: #2196f3; {sq}'>■</span> {tr('legend.moderate')} (1–10 mm/h) | "
+                    f"<span style='color: #0d47a1; {sq}'>■</span> {tr('legend.strong')} (10–50 mm/h) | "
+                    f"<span style='color: #1a237e; {sq}'>■</span> {tr('legend.extreme')} (&gt; 50 mm/h)<br>"
+                    f"• {tr('legend.scale')} 1–150 mm/h."
                 )
 
         if layer_type == "flood_simulation" and raster_layer is not None:
@@ -108,56 +108,56 @@ class HydroResultsWindow(QMainWindow):
                 max_depth = float(np.max(valid)) if valid.size > 0 else 0.0
                 flooded_cells = int(np.sum((arr != DEFAULT_NODATA) & (arr > 0)))
                 return (
-                    f"<b>Simulación de Inundación — Nivel {water_height:.2f} m</b><br>"
-                    f"• <span style='color: #aad4f5; {sq}'>■</span> Superficial (&lt; 0.5 m) | "
-                    f"<span style='color: #2196f3; {sq}'>■</span> Moderada (0.5–2 m) | "
-                    f"<span style='color: #1565c0; {sq}'>■</span> Profunda (2–5 m) | "
-                    f"<span style='color: #000033; {sq}'>■</span> Muy profunda (&gt; 5 m)<br>"
-                    f"• Celdas inundadas: {flooded_cells} | Profundidad máxima: {max_depth:.2f} m"
+                    f"<b>{tr('hydro.legend_flood_title').format(water_height)}</b><br>"
+                    f"• <span style='color: #aad4f5; {sq}'>■</span> {tr('legend.shallow')} (&lt; 0.5 m) | "
+                    f"<span style='color: #2196f3; {sq}'>■</span> {tr('legend.moderate')} (0.5–2 m) | "
+                    f"<span style='color: #1565c0; {sq}'>■</span> {tr('legend.deep')} (2–5 m) | "
+                    f"<span style='color: #000033; {sq}'>■</span> {tr('legend.very_deep')} (&gt; 5 m)<br>"
+                    f"• {tr('legend.flooded_cells')}: {flooded_cells} | {tr('legend.max_depth')}: {max_depth:.2f} m"
                 )
 
         legends = {
             "flow_direction": (
-                "<b>Dirección de Flujo (D8):</b><br>"
-                "• <span style='color: #1f77b4; {sq}'>■</span> Este (1) | "
-                "<span style='color: #ff7f0e; {sq}'>■</span> Sureste (2) | "
-                "<span style='color: #2ca02c; {sq}'>■</span> Sur (4) | "
-                "<span style='color: #d62728; {sq}'>■</span> Suroeste (8) | "
-                "<span style='color: #9467bd; {sq}'>■</span> Oeste (16) | "
-                "<span style='color: #8c564b; {sq}'>■</span> Noroeste (32) | "
-                "<span style='color: #e377c2; {sq}'>■</span> Norte (64) | "
-                "<span style='color: #7f7f7f; {sq}'>■</span> Noreste (128)"
+                f"<b>{tr('hydro.legend_flow_direction')}</b><br>"
+                f"• <span style='color: #1f77b4; {sq}'>■</span> {tr('legend.east')} (1) | "
+                f"<span style='color: #ff7f0e; {sq}'>■</span> {tr('legend.southeast')} (2) | "
+                f"<span style='color: #2ca02c; {sq}'>■</span> {tr('legend.south')} (4) | "
+                f"<span style='color: #d62728; {sq}'>■</span> {tr('legend.southwest')} (8) | "
+                f"<span style='color: #9467bd; {sq}'>■</span> {tr('legend.west')} (16) | "
+                f"<span style='color: #8c564b; {sq}'>■</span> {tr('legend.northwest')} (32) | "
+                f"<span style='color: #e377c2; {sq}'>■</span> {tr('legend.north')} (64) | "
+                f"<span style='color: #7f7f7f; {sq}'>■</span> {tr('legend.northeast')} (128)"
             ),
             "flow_accumulation": (
-                "<b>Acumulación de Flujo:</b><br>"
-                "• <span style='color: #dddddd; {sq}'>■</span> (Bajo) → "
-                "<span style='color: #3a79e0; {sq}'>■</span> (Medio)→ "
-                "<span style='color: #001f3f; {sq}'>■</span> (Alto)<br>"
-                "• Células con valor < 1 → Transparentes"
+                f"<b>{tr('hydro.legend_flow_accumulation')}</b><br>"
+                f"• <span style='color: #dddddd; {sq}'>■</span> ({tr('legend.low')}) → "
+                f"<span style='color: #3a79e0; {sq}'>■</span> ({tr('legend.medium')})→ "
+                f"<span style='color: #001f3f; {sq}'>■</span> ({tr('legend.high')})<br>"
+                "• Cells with value < 1 → Transparent"
             ),
             "ponding": (
-                "<b>Zonas de Encharcamiento:</b><br>"
-                "• Profundidad: <span style='color: #d2b48c; {sq}'>■</span> (Alta) → "
-                "<span style='color: #2ca02c; {sq}'>■</span> (Media) → "
-                "<span style='color: #1f77b4; {sq}'>■</span> (Baja) → "
-                "<span style='color: #000080; {sq}'>■</span> (Muy Baja)<br>"
-                "• Células con profundidad = 0 → Transparentes<br>"
+                f"<b>{tr('hydro.legend_ponding')}</b><br>"
+                f"• Depth: <span style='color: #d2b48c; {sq}'>■</span> ({tr('legend.high')}) → "
+                f"<span style='color: #2ca02c; {sq}'>■</span> ({tr('legend.medium')}) → "
+                f"<span style='color: #1f77b4; {sq}'>■</span> ({tr('legend.low')}) → "
+                f"<span style='color: #000080; {sq}'>■</span> ({tr('legend.very_high')})<br>"
+                "• Cells with depth = 0 → Transparent<br>"
             ),
             "rainfall_runoff": (
-                "<b>Escorrentía por Precipitaciones (m³/h):</b><br>"
-                "• <span style='color: #e8f4fd; {sq}'>■</span> (Bajo) → "
-                "<span style='color: #2196f3; {sq}'>■</span> (Medio) → "
-                "<span style='color: #0d47a1; {sq}'>■</span> (Alto) → "
-                "<span style='color: #1a237e; {sq}'>■</span> (Muy Alto)<br>"
-                "• Escala logarítmica. Células sin flujo → Transparentes"
+                f"<b>{tr('hydro.legend_rainfall')}</b><br>"
+                f"• <span style='color: #e8f4fd; {sq}'>■</span> ({tr('legend.low')}) → "
+                f"<span style='color: #2196f3; {sq}'>■</span> ({tr('legend.medium')}) → "
+                f"<span style='color: #0d47a1; {sq}'>■</span> ({tr('legend.high')}) → "
+                f"<span style='color: #1a237e; {sq}'>■</span> ({tr('legend.very_high')})<br>"
+                "• Logarithmic scale. Cells without flow → Transparent"
             )
         }
-        text = legends.get(layer_type, "Sin información de leyenda disponible")
+        text = legends.get(layer_type, "No legend information available")
         return text.replace("{sq}", sq)
 
 
 class AnalysisDialog(QDialog):
-    """Diálogo de análisis con pestañas."""
+    """Analysis dialog with tabs."""
 
     def __init__(self, initial_tab: str, layer_manager: LayerManager, parent=None):
         super().__init__(parent)
@@ -173,19 +173,19 @@ class AnalysisDialog(QDialog):
 
         # Geomorphology tab
         self._geomorph_tab = self._build_geomorphology_tab()
-        self._tabs.addTab(self._geomorph_tab, "Geomorfología")
+        self._tabs.addTab(self._geomorph_tab, tr("analysis.geomorphology"))
 
         # Hydrology tab
         self._hydro_tab = self._build_hydrology_tab()
-        self._tabs.addTab(self._hydro_tab, "Hidrología")
+        self._tabs.addTab(self._hydro_tab, tr("analysis.hydrology"))
 
         # Vegetation tab
         self._veg_tab = self._build_vegetation_tab()
-        self._tabs.addTab(self._veg_tab, "Vegetación")
+        self._tabs.addTab(self._veg_tab, tr("analysis.vegetation"))
 
         # Multitemporal tab
         self._multi_tab = self._build_multitemporal_tab()
-        self._tabs.addTab(self._multi_tab, "Multitemporal")
+        self._tabs.addTab(self._multi_tab, tr("analysis.multitemporal"))
 
         layout.addWidget(self._tabs)
 
@@ -202,13 +202,13 @@ class AnalysisDialog(QDialog):
         layout.addLayout(btn_layout)
 
     def _get_raster_combo(self) -> QComboBox:
-        """Crea un combo con las capas raster disponibles."""
+        """Create a combo with the available raster layers."""
         combo = QComboBox()
         for i, entry in enumerate(self.layer_manager.get_all_entries()):
             if entry.is_raster:
                 combo.addItem(entry.name, i)
         if combo.count() == 0:
-            combo.addItem("(No hay capas raster)", -1)
+            combo.addItem(tr("analysis.no_raster_layers"), -1)
         return combo
 
     # ------------------------------------------------------------------
@@ -220,49 +220,49 @@ class AnalysisDialog(QDialog):
         layout = QVBoxLayout(tab)
 
         # Source raster
-        grp_src = QGroupBox("Raster de entrada (MDT)")
+        grp_src = QGroupBox(tr("analysis.input_raster_dem"))
         form_src = QFormLayout(grp_src)
         self._geo_raster = self._get_raster_combo()
-        form_src.addRow("MDT", self._geo_raster)
+        form_src.addRow(tr("analysis.dem"), self._geo_raster)
         layout.addWidget(grp_src)
 
         # Analysis checkboxes
-        grp_anal = QGroupBox("Análisis a ejecutar")
+        grp_anal = QGroupBox(tr("analysis.to_execute"))
         vl = QVBoxLayout(grp_anal)
-        self._chk_slope = QCheckBox("Pendiente (slope)")
+        self._chk_slope = QCheckBox(tr("analysis.slope"))
         self._chk_slope.setChecked(True)
         vl.addWidget(self._chk_slope)
-        self._chk_aspect = QCheckBox("Orientación (aspect)")
+        self._chk_aspect = QCheckBox(tr("analysis.aspect"))
         self._chk_aspect.setChecked(True)
         vl.addWidget(self._chk_aspect)
-        self._chk_curvature = QCheckBox("Curvatura")
+        self._chk_curvature = QCheckBox(tr("analysis.curvature"))
         vl.addWidget(self._chk_curvature)
-        self._chk_roughness = QCheckBox("Rugosidad (TRI)")
+        self._chk_roughness = QCheckBox(tr("analysis.roughness"))
         vl.addWidget(self._chk_roughness)
-        self._chk_hillshade = QCheckBox("Sombreado (hillshade)")
+        self._chk_hillshade = QCheckBox(tr("analysis.hillshade"))
         self._chk_hillshade.setChecked(True)
         vl.addWidget(self._chk_hillshade)
-        self._chk_morpho = QCheckBox("Clasificación morfométrica")
+        self._chk_morpho = QCheckBox(tr("analysis.morpho_class"))
         vl.addWidget(self._chk_morpho)
         layout.addWidget(grp_anal)
 
         # Hillshade params
-        grp_hs = QGroupBox("Parámetros de sombreado")
+        grp_hs = QGroupBox(tr("analysis.parameters"))
         form_hs = QFormLayout(grp_hs)
         self._hs_azimuth = QDoubleSpinBox()
         self._hs_azimuth.setRange(0, 360)
         self._hs_azimuth.setValue(315)
         self._hs_azimuth.setSuffix("°")
-        form_hs.addRow("Azimut solar", self._hs_azimuth)
+        form_hs.addRow(tr("analysis.azimuth"), self._hs_azimuth)
         self._hs_altitude = QDoubleSpinBox()
         self._hs_altitude.setRange(1, 90)
         self._hs_altitude.setValue(45)
         self._hs_altitude.setSuffix("°")
-        form_hs.addRow("Altitud solar", self._hs_altitude)
+        form_hs.addRow(tr("analysis.altitude"), self._hs_altitude)
         layout.addWidget(grp_hs)
 
         # Run button
-        btn_run = QPushButton("▶ Ejecutar análisis geomorfológico")
+        btn_run = QPushButton(tr("analysis.execute_geomorph"))
         btn_run.setObjectName("primary")
         btn_run.clicked.connect(self._run_geomorphology)
         layout.addWidget(btn_run)
@@ -273,7 +273,7 @@ class AnalysisDialog(QDialog):
     def _run_geomorphology(self):
         idx = self._geo_raster.currentData()
         if idx is None or idx < 0:
-            QMessageBox.warning(self, "Aviso", "Selecciona un MDT primero.")
+            QMessageBox.warning(self, tr("dialog.confirm"), tr("analysis.warning_select_dem"))
             return
 
         dtm = self.layer_manager.get_layer(idx)
@@ -312,10 +312,10 @@ class AnalysisDialog(QDialog):
                 result = morphometric_classification(dtm)
                 self.layer_manager.add_layer(result)
 
-            QMessageBox.information(self, "Completado", "Análisis geomorfológico completado.")
+            QMessageBox.information(self, tr("dialog.confirm"), tr("analysis.completed_geomorph"))
 
         except Exception as e:
-            QMessageBox.critical(self, "Error", str(e))
+            QMessageBox.critical(self, tr("crs.error"), str(e))
 
     # ------------------------------------------------------------------
     # Hydrology Tab
@@ -325,60 +325,60 @@ class AnalysisDialog(QDialog):
         tab = QWidget()
         layout = QVBoxLayout(tab)
 
-        grp_src = QGroupBox("Raster de entrada (MDT)")
+        grp_src = QGroupBox(tr("analysis.input_raster_dem"))
         form_src = QFormLayout(grp_src)
         self._hydro_raster = self._get_raster_combo()
-        form_src.addRow("MDT", self._hydro_raster)
+        form_src.addRow(tr("analysis.dem"), self._hydro_raster)
         layout.addWidget(grp_src)
 
-        grp_anal = QGroupBox("Análisis a ejecutar")
+        grp_anal = QGroupBox(tr("analysis.to_execute"))
         vl = QVBoxLayout(grp_anal)
-        self._chk_flow_dir = QCheckBox("Dirección de flujo")
+        self._chk_flow_dir = QCheckBox(tr("hydro.flow_direction"))
         self._chk_flow_dir.setChecked(True)
         vl.addWidget(self._chk_flow_dir)
-        self._chk_flow_acc = QCheckBox("Acumulación de flujo")
+        self._chk_flow_acc = QCheckBox(tr("hydro.flow_accumulation"))
         self._chk_flow_acc.setChecked(True)
         vl.addWidget(self._chk_flow_acc)
-        self._chk_ponding = QCheckBox("Zonas de encharcamiento")
+        self._chk_ponding = QCheckBox(tr("hydro.ponding_zones"))
         vl.addWidget(self._chk_ponding)
-        self._chk_rainfall = QCheckBox("Simulación de precipitaciones")
+        self._chk_rainfall = QCheckBox(tr("hydro.rainfall_simulation"))
         vl.addWidget(self._chk_rainfall)
-        self._chk_flood = QCheckBox("Simulación de inundación")
+        self._chk_flood = QCheckBox(tr("hydro.flood_simulation"))
         vl.addWidget(self._chk_flood)
         layout.addWidget(grp_anal)
 
-        grp_params = QGroupBox("Parámetros")
+        grp_params = QGroupBox(tr("analysis.parameters"))
         form_p = QFormLayout(grp_params)
         self._drainage_threshold = QSpinBox()
         self._drainage_threshold.setRange(10, 100000)
         self._drainage_threshold.setValue(1000)
-        form_p.addRow("Umbral red drenaje", self._drainage_threshold)
+        form_p.addRow(tr("hydro.drainage_threshold"), self._drainage_threshold)
         self._rainfall_intensity = QDoubleSpinBox()
         self._rainfall_intensity.setRange(0.1, 1000.0)
         self._rainfall_intensity.setValue(10.0)
         self._rainfall_intensity.setDecimals(1)
         self._rainfall_intensity.setSuffix(" mm/h")
-        form_p.addRow("Intensidad precipitación", self._rainfall_intensity)
+        form_p.addRow(tr("hydro.rainfall_intensity"), self._rainfall_intensity)
         self._flood_water_height = QDoubleSpinBox()
         self._flood_water_height.setRange(-9999.0, 99999.0)
         self._flood_water_height.setDecimals(2)
         self._flood_water_height.setValue(10.0)
         self._flood_water_height.setSuffix(" m")
-        form_p.addRow("Nivel del agua (cota absoluta)", self._flood_water_height)
+        form_p.addRow(tr("hydro.water_level"), self._flood_water_height)
         layout.addWidget(grp_params)
 
-        # Botones análisis hidrológico
-        btn_run = QPushButton("▶ Ejecutar análisis hidrológico")
+        # Hydrological analysis buttons
+        btn_run = QPushButton(tr("hydro.execute"))
         btn_run.setObjectName("primary")
         btn_run.clicked.connect(self._run_hydrology)
         layout.addWidget(btn_run)
 
-        self._btn_view_results = QPushButton("Ver resultados")
+        self._btn_view_results = QPushButton(tr("analysis.view_results"))
         self._btn_view_results.setEnabled(False)
         self._btn_view_results.clicked.connect(self._show_hydro_results)
         layout.addWidget(self._btn_view_results)
 
-        self._btn_hydro_history = QPushButton("Historial")
+        self._btn_hydro_history = QPushButton(tr("hydro.history"))
         self._btn_hydro_history.clicked.connect(self._show_hydro_history)
         layout.addWidget(self._btn_hydro_history)
 
@@ -386,7 +386,7 @@ class AnalysisDialog(QDialog):
         return tab
 
     def _show_hydro_results(self):
-        """Muestra la ventana con resultados hidrológicos."""
+        """Show the window with hydrological results."""
         if hasattr(self, "_hydro_results") and self._hydro_results:
             main_window = self.parent()
             results_window = HydroResultsWindow(self._hydro_results, main_window)
@@ -401,28 +401,28 @@ class AnalysisDialog(QDialog):
             results_window.show()
 
     def _show_hydro_history(self):
-        """Muestra un modal con el historial de análisis hidrológicos y permite abrirlos."""
+        """Show a modal with the hydrological analysis history and allows opening them."""
         main_window = self.parent()
         history = getattr(main_window, "_hydro_history", [])
         if not history:
-            QMessageBox.information(self, "Historial", "No hay análisis hidrológicos en el historial.")
+            QMessageBox.information(self, tr("hydro.history"), tr("hydro.no_history"))
             return
 
         dlg = QDialog(self)
-        dlg.setWindowTitle("Historial de Análisis Hidrológicos")
+        dlg.setWindowTitle(tr("hydro.history_title"))
         dlg.setMinimumSize(400, 300)
         l = QVBoxLayout(dlg)
         
         list_widget = QListWidget()
         for idx, item in enumerate(history):
-            text = f"[{item['timestamp']}] MDT: {item['layer']} ({len(item['results'])} capas)"
+            text = f"[{item['timestamp']}] {tr('analysis.history_dem')} {item['layer']} ({len(item['results'])} {tr('analysis.history_layers')})"
             lw_item = QListWidgetItem(text)
             lw_item.setData(Qt.ItemDataRole.UserRole, idx)
             list_widget.addItem(lw_item)
             
         l.addWidget(list_widget)
         
-        btn_open = QPushButton("Abrir resultados seleccionados")
+        btn_open = QPushButton(tr("analysis.view_results"))
         def on_open():
             selected = list_widget.currentItem()
             if selected:
@@ -446,7 +446,7 @@ class AnalysisDialog(QDialog):
     def _run_hydrology(self):
         idx = self._hydro_raster.currentData()
         if idx is None or idx < 0:
-            QMessageBox.warning(self, "Aviso", "Selecciona un MDT primero.")
+            QMessageBox.warning(self, tr("dialog.confirm"), tr("analysis.warning_select_dem"))
             return
 
         dtm = self.layer_manager.get_layer(idx)
@@ -497,13 +497,13 @@ class AnalysisDialog(QDialog):
                 })
 
                 self._btn_view_results.setEnabled(True)
-                QMessageBox.information(self, "Completado", "Análisis hidrológico completado.\nPresiona 'Ver resultados' para ver las imágenes.")
+                QMessageBox.information(self, tr("dialog.confirm"), tr("analysis.completed_hydro"))
             else:
-                QMessageBox.warning(self, "Aviso", "No se seleccionó ningún análisis.")
+                QMessageBox.warning(self, tr("dialog.confirm"), tr("analysis.warning_no_analysis"))
 
         except Exception as e:
-            QMessageBox.critical(self, "Error", str(e))
-            logger.error(f"Error en análisis hidrológico: {e}", exc_info=True)
+            QMessageBox.critical(self, tr("crs.error"), str(e))
+            logger.error(f"Error in hydrological analysis: {e}", exc_info=True)
 
 
     # ------------------------------------------------------------------
@@ -514,47 +514,47 @@ class AnalysisDialog(QDialog):
         tab = QWidget()
         layout = QVBoxLayout(tab)
 
-        grp_src = QGroupBox("Raster de entrada (CHM)")
+        grp_src = QGroupBox(tr("analysis.input_raster_chm"))
         form_src = QFormLayout(grp_src)
         self._veg_raster = self._get_raster_combo()
-        form_src.addRow("CHM", self._veg_raster)
+        form_src.addRow(tr("analysis.chm"), self._veg_raster)
         layout.addWidget(grp_src)
 
-        grp_params = QGroupBox("Parámetros")
+        grp_params = QGroupBox(tr("analysis.parameters"))
         form_p = QFormLayout(grp_params)
 
         self._min_tree_height = QDoubleSpinBox()
         self._min_tree_height.setRange(0.5, 50.0)
         self._min_tree_height.setValue(2.0)
         self._min_tree_height.setSuffix(" m")
-        form_p.addRow("Altura mín. árbol", self._min_tree_height)
+        form_p.addRow(tr("analysis.min_tree_height"), self._min_tree_height)
 
         self._crown_window = QSpinBox()
         self._crown_window.setRange(3, 21)
         self._crown_window.setValue(5)
         self._crown_window.setSuffix(" px")
-        form_p.addRow("Ventana detección", self._crown_window)
+        form_p.addRow(tr("analysis.detection_window"), self._crown_window)
 
         self._density_cell = QDoubleSpinBox()
         self._density_cell.setRange(1, 100)
         self._density_cell.setValue(10)
         self._density_cell.setSuffix(" m")
-        form_p.addRow("Celda densidad", self._density_cell)
+        form_p.addRow(tr("analysis.density_cell"), self._density_cell)
 
         layout.addWidget(grp_params)
 
-        grp_anal = QGroupBox("Análisis")
+        grp_anal = QGroupBox(tr("analysis.analysis"))
         vl = QVBoxLayout(grp_anal)
-        self._chk_tree_detect = QCheckBox("Detectar árboles individuales")
+        self._chk_tree_detect = QCheckBox(tr("analysis.detect_trees"))
         self._chk_tree_detect.setChecked(True)
         vl.addWidget(self._chk_tree_detect)
-        self._chk_crown_seg = QCheckBox("Segmentar copas (watershed)")
+        self._chk_crown_seg = QCheckBox(tr("analysis.segment_crowns"))
         vl.addWidget(self._chk_crown_seg)
-        self._chk_density = QCheckBox("Mapa de densidad")
+        self._chk_density = QCheckBox(tr("analysis.density_map"))
         vl.addWidget(self._chk_density)
         layout.addWidget(grp_anal)
 
-        btn_run = QPushButton("▶ Ejecutar análisis de vegetación")
+        btn_run = QPushButton(tr("analysis.execute_veg"))
         btn_run.setObjectName("primary")
         btn_run.clicked.connect(self._run_vegetation)
         layout.addWidget(btn_run)
@@ -565,7 +565,7 @@ class AnalysisDialog(QDialog):
     def _run_vegetation(self):
         idx = self._veg_raster.currentData()
         if idx is None or idx < 0:
-            QMessageBox.warning(self, "Aviso", "Selecciona un CHM primero.")
+            QMessageBox.warning(self, tr("dialog.confirm"), tr("analysis.warning_select_chm"))
             return
 
         chm = self.layer_manager.get_layer(idx)
@@ -582,7 +582,7 @@ class AnalysisDialog(QDialog):
                 tree_tops = detect_tree_tops(
                     chm, self._min_tree_height.value(), self._crown_window.value()
                 )
-                logger.info(f"Detectados {len(tree_tops)} árboles")
+                logger.info(f"Detected {len(tree_tops)} trees")
 
             if self._chk_crown_seg.isChecked() and tree_tops is not None:
                 labels, height_map = segment_crowns(chm, tree_tops)
@@ -593,13 +593,13 @@ class AnalysisDialog(QDialog):
                 result = density_map(chm, self._density_cell.value())
                 self.layer_manager.add_layer(result)
 
-            msg = "Análisis de vegetación completado."
+            msg = tr("analysis.completed_veg")
             if tree_tops is not None:
-                msg += f"\nÁrboles detectados: {len(tree_tops)}"
-            QMessageBox.information(self, "Completado", msg)
+                msg += f"\n{tr('analysis.trees_detected').format(len(tree_tops))}"
+            QMessageBox.information(self, tr("dialog.confirm"), msg)
 
         except Exception as e:
-            QMessageBox.critical(self, "Error", str(e))
+            QMessageBox.critical(self, tr("crs.error"), str(e))
 
     # ------------------------------------------------------------------
     # Multitemporal Tab
@@ -609,36 +609,36 @@ class AnalysisDialog(QDialog):
         tab = QWidget()
         layout = QVBoxLayout(tab)
 
-        grp_src = QGroupBox("Rasters de entrada")
+        grp_src = QGroupBox(tr("analysis.input_rasters"))
         form_src = QFormLayout(grp_src)
         self._multi_before = self._get_raster_combo()
-        form_src.addRow("DEM anterior", self._multi_before)
+        form_src.addRow(tr("analysis.previous_dem"), self._multi_before)
         self._multi_after = self._get_raster_combo()
-        form_src.addRow("DEM posterior", self._multi_after)
+        form_src.addRow(tr("analysis.posterior_dem"), self._multi_after)
         layout.addWidget(grp_src)
 
-        grp_params = QGroupBox("Parámetros")
+        grp_params = QGroupBox(tr("analysis.parameters"))
         form_p = QFormLayout(grp_params)
         self._dod_threshold = QDoubleSpinBox()
         self._dod_threshold.setRange(0.01, 10.0)
         self._dod_threshold.setValue(0.3)
         self._dod_threshold.setSuffix(" m")
-        form_p.addRow("Umbral cambio", self._dod_threshold)
+        form_p.addRow(tr("analysis.change_threshold"), self._dod_threshold)
         layout.addWidget(grp_params)
 
-        grp_anal = QGroupBox("Análisis")
+        grp_anal = QGroupBox(tr("analysis.analysis"))
         vl = QVBoxLayout(grp_anal)
-        self._chk_dod = QCheckBox("Diferencia de DEMs (DoD)")
+        self._chk_dod = QCheckBox(tr("analysis.dod"))
         self._chk_dod.setChecked(True)
         vl.addWidget(self._chk_dod)
-        self._chk_change_class = QCheckBox("Clasificar cambios")
+        self._chk_change_class = QCheckBox(tr("analysis.classify_changes"))
         self._chk_change_class.setChecked(True)
         vl.addWidget(self._chk_change_class)
-        self._chk_deforest = QCheckBox("Detectar deforestación (requiere CHMs)")
+        self._chk_deforest = QCheckBox(tr("analysis.detect_deforest"))
         vl.addWidget(self._chk_deforest)
         layout.addWidget(grp_anal)
 
-        btn_run = QPushButton("▶ Ejecutar análisis multitemporal")
+        btn_run = QPushButton(tr("analysis.execute_multi"))
         btn_run.setObjectName("primary")
         btn_run.clicked.connect(self._run_multitemporal)
         layout.addWidget(btn_run)
@@ -651,7 +651,7 @@ class AnalysisDialog(QDialog):
         idx_after = self._multi_after.currentData()
 
         if idx_before is None or idx_before < 0 or idx_after is None or idx_after < 0:
-            QMessageBox.warning(self, "Aviso", "Selecciona ambos rasters.")
+            QMessageBox.warning(self, tr("dialog.confirm"), tr("analysis.warning_select_both"))
             return
 
         before = self.layer_manager.get_layer(idx_before)
@@ -678,7 +678,7 @@ class AnalysisDialog(QDialog):
                 deforest = detect_deforestation(before, after)
                 self.layer_manager.add_layer(deforest)
 
-            QMessageBox.information(self, "Completado", "Análisis multitemporal completado.")
+            QMessageBox.information(self, tr("dialog.confirm"), tr("analysis.completed_multi"))
 
         except Exception as e:
-            QMessageBox.critical(self, "Error", str(e))
+            QMessageBox.critical(self, tr("crs.error"), str(e))

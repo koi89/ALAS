@@ -1,6 +1,6 @@
 """
 ALAS — Logging
-Sistema de logging con rotación de archivos y emisión de señales Qt.
+Logging system with file rotation and Qt signal emission.
 """
 
 import logging
@@ -11,12 +11,12 @@ from app.config import USER_CONFIG_DIR, APP_NAME
 
 
 class LogSignalEmitter(QObject):
-    """Emite señales Qt con cada mensaje de log."""
+    """Emits Qt signals with each log message."""
     log_message = pyqtSignal(str, str)  # (level, message)
 
 
 class QtLogHandler(logging.Handler):
-    """Handler que emite señales Qt."""
+    """Handler that emits Qt signals."""
     def __init__(self, emitter: LogSignalEmitter):
         super().__init__()
         self.emitter = emitter
@@ -71,7 +71,7 @@ def setup_logging(level: int = logging.DEBUG) -> logging.Logger:
     qt_handler.setFormatter(fmt_short)
     logger.addHandler(qt_handler)
 
-    logger.info("Logging inicializado")
+    logger.info("Logging initialized")
     return logger
 
 

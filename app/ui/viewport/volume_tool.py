@@ -1,7 +1,7 @@
 """
 ALAS — Volume Tool
-Modal flotante para la herramienta de cálculo de volumen.
-Muestra vértices en tiempo real, permite definir Z de referencia y muestra resultados inline.
+Floating modal for the volume calculation tool.
+Shows vertices in real time, allows defining reference Z and shows inline results.
 """
 
 import numpy as np
@@ -21,11 +21,11 @@ logger = get_logger("ui.volume_tool")
 
 class VolumeToolDialog(QDialog):
     """
-    Modal flotante de la herramienta de volumen.
-    - Se mantiene visible mientras el usuario hace clic en el viewport.
-    - Permite configurar la cota Z de referencia.
-    - Muestra la lista de vértices en tiempo real.
-    - Al pulsar 'Calcular' o Enter con >= 3 vértices, muestra los resultados inline.
+    Floating modal for the volume tool.
+    - Stays visible while the user clicks in the viewport.
+    - Allows configuring the reference Z level.
+    - Shows the vertex list in real time.
+    - When 'Calculate' or Enter is pressed with >= 3 vertices, shows inline results.
     """
 
     calculate_requested = pyqtSignal()
@@ -34,7 +34,7 @@ class VolumeToolDialog(QDialog):
 
     def __init__(self, parent=None):
         super().__init__(parent, Qt.WindowType.Tool)
-        self.setWindowTitle("Cálculo de Volumen")
+        self.setWindowTitle(tr("vol.title"))
         self.setMinimumWidth(320)
         self.setMaximumWidth(400)
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
@@ -47,29 +47,26 @@ class VolumeToolDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.setSpacing(10)
 
-        # --- Instrucciones ---
-        lbl_hint = QLabel(
-            "Clic izquierdo para añadir vértices al polígono de cálculo.\n"
-            "Define la cota Z de referencia y pulsa <b>Calcular</b> con ≥ 3 vértices."
-        )
+        # --- Instructions ---
+        lbl_hint = QLabel(tr("vol.instructions"))
         lbl_hint.setWordWrap(True)
         lbl_hint.setObjectName("muted")
         lbl_hint.setTextFormat(Qt.TextFormat.RichText)
         layout.addWidget(lbl_hint)
 
-        # --- Configuración ---
-        grp_config = QGroupBox("Configuración")
+        # --- Configuration ---
+        grp_config = QGroupBox(tr("vol.config"))
         config_form = QFormLayout(grp_config)
         self._z_ref_spin = QDoubleSpinBox()
         self._z_ref_spin.setRange(-10000, 10000)
         self._z_ref_spin.setDecimals(2)
         self._z_ref_spin.setValue(0.0)
         self._z_ref_spin.setSuffix(" m")
-        config_form.addRow("Nivel de ref. (Z):", self._z_ref_spin)
+        config_form.addRow(tr("vol.ref_level"), self._z_ref_spin)
         layout.addWidget(grp_config)
 
-        # --- Lista de vértices ---
-        grp_verts = QGroupBox("Vértices del Polígono")
+        # --- Vertex list ---
+        grp_verts = QGroupBox(tr("vol.polygon_verts"))
         verts_layout = QVBoxLayout(grp_verts)
         verts_layout.setContentsMargins(6, 6, 6, 6)
 
@@ -82,23 +79,23 @@ class VolumeToolDialog(QDialog):
         )
         verts_layout.addWidget(self._vertex_list)
 
-        self._count_label = QLabel("0 vértices")
+        self._count_label = QLabel(tr("area.zero_vertices"))
         self._count_label.setObjectName("muted")
         self._count_label.setAlignment(Qt.AlignmentFlag.AlignRight)
         verts_layout.addWidget(self._count_label)
 
         layout.addWidget(grp_verts)
 
-        # --- Botones de acción ---
+        # --- Action buttons ---
         btn_row_1 = QHBoxLayout()
 
-        self._btn_calc = QPushButton("Calcular")
+        self._btn_calc = QPushButton(tr("vol.calculate"))
         self._btn_calc.setObjectName("primary")
         self._btn_calc.setEnabled(False)
         self._btn_calc.clicked.connect(self._on_calculate_clicked)
         btn_row_1.addWidget(self._btn_calc)
 
-        btn_undo = QPushButton("Deshacer")
+        btn_undo = QPushButton(tr("vol.undo"))
         btn_undo.clicked.connect(self._on_undo)
         btn_row_1.addWidget(btn_undo)
         
@@ -106,25 +103,25 @@ class VolumeToolDialog(QDialog):
 
         btn_row_2 = QHBoxLayout()
 
-        btn_clear_vol = QPushButton("Borrar volumen")
-        btn_clear_vol.setToolTip("Borrar solo la representación 3D del volumen coloreado")
+        btn_clear_vol = QPushButton(tr("vol.clear_volume"))
+        btn_clear_vol.setToolTip(tr("vol.clear_volume_tooltip"))
         btn_clear_vol.clicked.connect(self._on_clear_volume)
         btn_row_2.addWidget(btn_clear_vol)
 
-        btn_clear = QPushButton("Limpiar todo")
+        btn_clear = QPushButton(tr("vol.clear_all"))
         btn_clear.clicked.connect(self._on_clear)
         btn_row_2.addWidget(btn_clear)
 
         layout.addLayout(btn_row_2)
 
-        # --- Separador ---
+        # --- Separator ---
         sep = QFrame()
         sep.setFrameShape(QFrame.Shape.HLine)
         sep.setStyleSheet("color: #2a2a3d;")
         layout.addWidget(sep)
 
-        # --- Panel de resultados ---
-        self._results_group = QGroupBox("Resultados")
+        # --- Results panel ---
+        self._results_group = QGroupBox(tr("vol.results"))
         results_form = QFormLayout(self._results_group)
         results_form.setSpacing(6)
 
@@ -139,10 +136,10 @@ class VolumeToolDialog(QDialog):
         self._lbl_net.setFont(font_val)
         self._lbl_area = QLabel("—")
 
-        results_form.addRow("Corte (Desmonte):", self._lbl_cut)
-        results_form.addRow("Relleno (Terraplén):", self._lbl_fill)
-        results_form.addRow("Volumen Neto:", self._lbl_net)
-        results_form.addRow("Área base:", self._lbl_area)
+        results_form.addRow(tr("vol.cut"), self._lbl_cut)
+        results_form.addRow(tr("vol.fill"), self._lbl_fill)
+        results_form.addRow(tr("vol.net"), self._lbl_net)
+        results_form.addRow(tr("vol.base_area"), self._lbl_area)
 
         self._results_group.setVisible(False)
         layout.addWidget(self._results_group)
@@ -153,7 +150,7 @@ class VolumeToolDialog(QDialog):
         self._lbl_source.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self._lbl_source)
 
-        # --- Botón cerrar ---
+        # --- Close button ---
         btn_close = QPushButton(tr("dialog.close"))
         btn_close.clicked.connect(self._on_close)
         layout.addWidget(btn_close)
@@ -174,7 +171,7 @@ class VolumeToolDialog(QDialog):
         self._vertex_list.addItem(item)
         self._vertex_list.scrollToBottom()
 
-        self._count_label.setText(f"{n} vértice{'s' if n != 1 else ''}")
+        self._count_label.setText(f"{n} {tr('area.vertex_count').lower()}{'es' if n != 1 else ''}")
         self._btn_calc.setEnabled(n >= 3)
 
         if self._results_group.isVisible():
@@ -188,12 +185,12 @@ class VolumeToolDialog(QDialog):
         return self._z_ref_spin.value()
 
     def show_results(self, cut_m3: float, fill_m3: float, net_m3: float, area_m2: float):
-        self._lbl_cut.setText(f"{cut_m3:,.2f} m³")
-        self._lbl_fill.setText(f"{fill_m3:,.2f} m³")
-        self._lbl_net.setText(f"{net_m3:,.2f} m³")
-        self._lbl_area.setText(f"{area_m2:,.2f} m²")
+        self._lbl_cut.setText(f"{cut_m3:,.2f} {tr('vol.unit_m3')}")
+        self._lbl_fill.setText(f"{fill_m3:,.2f} {tr('vol.unit_m3')}")
+        self._lbl_net.setText(f"{net_m3:,.2f} {tr('vol.unit_m3')}")
+        self._lbl_area.setText(f"{area_m2:,.2f} {tr('dist.unit_m')}")
 
-        self._lbl_source.setText("Volumen calculado usando el MDT activo y la cota Z de referencia.")
+        self._lbl_source.setText(tr("vol.source"))
         self._results_group.setVisible(True)
         self.adjustSize()
         
@@ -206,7 +203,7 @@ class VolumeToolDialog(QDialog):
     def reset(self):
         self._vertices.clear()
         self._vertex_list.clear()
-        self._count_label.setText("0 vértices")
+        self._count_label.setText(tr("area.zero_vertices"))
         self._btn_calc.setEnabled(False)
         self._results_group.setVisible(False)
         self._lbl_source.setText("")
@@ -227,7 +224,7 @@ class VolumeToolDialog(QDialog):
         self._vertices.pop()
         self._vertex_list.takeItem(self._vertex_list.count() - 1)
         n = len(self._vertices)
-        self._count_label.setText(f"{n} vértice{'s' if n != 1 else ''}")
+        self._count_label.setText(f"{n} {tr('area.vertex_count').lower()}{'es' if n != 1 else ''}")
         self._btn_calc.setEnabled(n >= 3)
         self.clear_requested.emit()
 

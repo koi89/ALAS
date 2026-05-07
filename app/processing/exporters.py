@@ -1,6 +1,6 @@
 """
 ALAS — Exporters
-Exportación a GeoTIFF, OBJ, Shapefile, GeoJSON y PDF.
+Export to GeoTIFF, OBJ, Shapefile, GeoJSON, and PDF.
 """
 
 import numpy as np
@@ -17,24 +17,24 @@ logger = get_logger("processing.exporters")
 
 def export_point_cloud(pc: PointCloudData, path: str,
                         compress: bool = True):
-    """Exporta nube de puntos a LAS/LAZ."""
+    """Exports point cloud to LAS/LAZ."""
     pc.to_file(path, compress=compress)
 
 
 def export_geotiff(raster: RasterLayer, path: str,
                     compress: str = None):
-    """Exporta raster a GeoTIFF."""
+    """Exports raster to GeoTIFF."""
     raster.to_geotiff(path, compress=compress or DEFAULT_GEOTIFF_COMPRESS)
 
 
 def export_mesh_obj(vertices: np.ndarray, faces: np.ndarray,
                      path: str):
     """
-    Exporta una malla 3D a formato OBJ.
-    vertices: (N, 3) array de vértices.
-    faces: (M, 3) array de índices de triángulos.
+    Exports a 3D mesh to OBJ format.
+    vertices: (N, 3) array of vertices.
+    faces: (M, 3) array of triangle indices.
     """
-    logger.info(f"Exportando OBJ: {Path(path).name}")
+    logger.info(f"Exporting OBJ: {Path(path).name}")
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -49,23 +49,23 @@ def export_mesh_obj(vertices: np.ndarray, faces: np.ndarray,
         f.write("\n")
 
         for face in faces:
-            # OBJ usa índices 1-based
+            # OBJ uses 1-based indices
             f.write(f"f {face[0]+1} {face[1]+1} {face[2]+1}\n")
 
-    logger.info(f"OBJ guardado: {path}")
+    logger.info(f"OBJ saved: {path}")
 
 
 def raster_to_mesh(raster: RasterLayer) -> tuple:
     """
-    Convierte un raster a malla triangulada para exportar como OBJ.
-    Devuelve (vertices, faces).
+    Converts a raster to triangulated mesh for OBJ export.
+    Returns (vertices, faces).
     """
     data = raster.get_band(0)
     rows, cols = data.shape
     bounds = raster.bounds
 
     if bounds is None:
-        raise ValueError("Raster sin extensión definida.")
+        raise ValueError("Raster without defined extent.")
 
     xmin, ymin, xmax, ymax = bounds
     xs = np.linspace(xmin, xmax, cols)
@@ -84,7 +84,7 @@ def raster_to_mesh(raster: RasterLayer) -> tuple:
 
     vertices = np.array(vertices, dtype=np.float64)
 
-    # Triángulos
+    # Triangles
     faces = []
     for r in range(rows - 1):
         for c in range(cols - 1):
@@ -100,21 +100,21 @@ def raster_to_mesh(raster: RasterLayer) -> tuple:
 
     faces = np.array(faces, dtype=np.int64) if faces else np.zeros((0, 3), dtype=np.int64)
 
-    logger.info(f"Malla: {len(vertices)} vértices, {len(faces)} triángulos")
+    logger.info(f"Mesh: {len(vertices)} vertices, {len(faces)} triangles")
     return vertices, faces
 
 
 def export_vector(geometries: list, attributes: list,
                    path: str, crs_epsg: int = None):
     """
-    Exporta geometrías a Shapefile o GeoJSON.
-    geometries: lista de geometrías shapely.
-    attributes: lista de dicts con propiedades.
+    Exports geometries to Shapefile or GeoJSON.
+    geometries: list of shapely geometries.
+    attributes: list of dicts with properties.
     """
     import geopandas as gpd
     from shapely.geometry import mapping
 
-    logger.info(f"Exportando vectorial: {Path(path).name}")
+    logger.info(f"Exporting vector: {Path(path).name}")
 
     gdf = gpd.GeoDataFrame(attributes, geometry=geometries)
     if crs_epsg:
@@ -132,14 +132,14 @@ def export_vector(geometries: list, attributes: list,
     else:
         gdf.to_file(str(path))
 
-    logger.info(f"Vectorial guardado: {path} ({len(geometries)} features)")
+    logger.info(f"Vector saved: {path} ({len(geometries)} features)")
 
 
 def export_pdf_report(title: str, metadata: dict,
                        statistics: dict, screenshots: list,
                        path: str):
     """
-    Genera un reporte PDF con estadísticas y capturas.
+    Generates a PDF report with statistics and screenshots.
     """
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.units import cm
@@ -150,28 +150,28 @@ def export_pdf_report(title: str, metadata: dict,
     from reportlab.lib import colors
     from reportlab.lib.enums import TA_CENTER
 
-    logger.info(f"Generando reporte PDF: {Path(path).name}")
+    logger.info(f"Generating PDF report: {Path(path).name}")
 
     doc = SimpleDocTemplate(str(path), pagesize=A4,
                             topMargin=2*cm, bottomMargin=2*cm)
     styles = getSampleStyleSheet()
     elements = []
 
-    # Estilo título
+    # Title style
     title_style = ParagraphStyle(
         'CustomTitle', parent=styles['Title'],
         fontSize=24, textColor=colors.HexColor("#7c3aed"),
         spaceAfter=20
     )
 
-    # Título
+    # Title
     elements.append(Paragraph(title, title_style))
     elements.append(Paragraph("ALAS — Aerial LiDAR Analysis Software", styles['Normal']))
     elements.append(Spacer(1, 20))
 
     # Metadata
     if metadata:
-        elements.append(Paragraph("Información del proyecto", styles['Heading2']))
+        elements.append(Paragraph("Project information", styles['Heading2']))
         meta_data = [[k, str(v)] for k, v in metadata.items()]
         meta_table = Table(meta_data, colWidths=[6*cm, 10*cm])
         meta_table.setStyle(TableStyle([
@@ -189,9 +189,9 @@ def export_pdf_report(title: str, metadata: dict,
         elements.append(meta_table)
         elements.append(Spacer(1, 20))
 
-    # Estadísticas
+    # Statistics
     if statistics:
-        elements.append(Paragraph("Estadísticas", styles['Heading2']))
+        elements.append(Paragraph("Statistics", styles['Heading2']))
         stats_data = [[k, f"{v:.4f}" if isinstance(v, float) else str(v)]
                        for k, v in statistics.items()]
         stats_table = Table(stats_data, colWidths=[8*cm, 8*cm])
@@ -207,13 +207,13 @@ def export_pdf_report(title: str, metadata: dict,
         elements.append(stats_table)
         elements.append(Spacer(1, 20))
 
-    # Capturas
+    # Screenshots
     for img_path in screenshots:
         if Path(img_path).exists():
-            elements.append(Paragraph("Visualización", styles['Heading2']))
+            elements.append(Paragraph("Visualization", styles['Heading2']))
             img = Image(img_path, width=16*cm, height=12*cm)
             elements.append(img)
             elements.append(Spacer(1, 10))
 
     doc.build(elements)
-    logger.info(f"Reporte PDF guardado: {path}")
+    logger.info(f"PDF report saved: {path}")

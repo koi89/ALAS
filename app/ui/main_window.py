@@ -1,6 +1,6 @@
 """
 ALAS — Main Window
-Ventana principal: viewport 3D central, paneles dock, menú y toolbar.
+Main window: central 3D viewport, dock panels, menu and toolbar.
 """
 
 import os
@@ -37,7 +37,7 @@ logger = get_logger("ui.main_window")
 
 
 class MainWindow(QMainWindow):
-    """Ventana principal de ALAS."""
+    """ALAS main window."""
 
     def __init__(self):
         super().__init__()
@@ -53,7 +53,7 @@ class MainWindow(QMainWindow):
         saved_lang = self.preferences.get("language", "es")
         set_language(saved_lang)
 
-        # Tool dialogs 
+        # Tool dialogs
         self._area_dialog = None
         self._distance_dialog = None
         self._measurements_dialog = None
@@ -70,7 +70,7 @@ class MainWindow(QMainWindow):
         # Restore geometry
         self._restore_state()
 
-        logger.info(f"{APP_NAME} v{APP_VERSION} iniciado")
+        logger.info(f"{APP_NAME} v{APP_VERSION} started")
 
     # ==================================================================
     # Window setup
@@ -202,11 +202,11 @@ class MainWindow(QMainWindow):
         menu_view.addSeparator()
 
         # Language submenu
-        menu_lang = menu_view.addMenu("Idioma / Language")
-        act_es = QAction("Español", self)
+        menu_lang = menu_view.addMenu(tr("menu.language"))
+        act_es = QAction(tr("lang.spanish"), self)
         act_es.triggered.connect(lambda: self._change_language("es"))
         menu_lang.addAction(act_es)
-        act_en = QAction("English", self)
+        act_en = QAction(tr("lang.english"), self)
         act_en.triggered.connect(lambda: self._change_language("en"))
         menu_lang.addAction(act_en)
 
@@ -243,7 +243,7 @@ class MainWindow(QMainWindow):
         act_overlap.triggered.connect(self._remove_overlap)
         menu_proc.addAction(act_overlap)
 
-        # --- Análisis ---
+        # --- Analysis ---
         menu_analysis = menubar.addMenu(tr("menu.analysis"))
 
         act_geomorph = QAction(tr("action.geomorphology"), self)
@@ -283,7 +283,7 @@ class MainWindow(QMainWindow):
 
         menu_tools.addSeparator()
 
-        act_history = QAction("Historial de medidas", self)
+        act_history = QAction(tr("action.measurements"), self)
         act_history.setShortcut(QKeySequence("Ctrl+H"))
         act_history.triggered.connect(self._show_measurements_history)
         menu_tools.addAction(act_history)
@@ -316,7 +316,7 @@ class MainWindow(QMainWindow):
 
     def _update_crs_display(self, epsg: int = None):
         if epsg:
-            self._crs_label.setText(f"EPSG:{epsg}")
+            self._crs_label.setText(f"{tr('crs.epsg_prefix')}{epsg}")
         else:
             self._crs_label.setText(tr("status.no_crs"))
 
@@ -328,17 +328,17 @@ class MainWindow(QMainWindow):
         self._points_label.setText(f"{total:,} {tr('status.points')}")
 
     def _setup_shortcuts(self):
-        """Configura atajos de teclado globales."""
-        self._act_clear = QAction("Limpiar herramientas", self)
+        """Configures global keyboard shortcuts."""
+        self._act_clear = QAction(tr("action.reset_view"), self)
         self._act_clear.setShortcut(QKeySequence("Esc"))
         self._act_clear.triggered.connect(self._clear_active_tools)
         self.addAction(self._act_clear)
 
     def _clear_active_tools(self):
-        """Detiene cualquier herramienta activa y limpia el visor."""
+        """Stops any active tool and clears the viewport."""
         self.viewport.disable_tools()
         self._update_status(tr("status.ready"))
-        logger.info("Herramientas limpiadas por el usuario")
+        logger.info("Tools cleared by user")
 
     # ==================================================================
     # Signal connections
@@ -414,19 +414,19 @@ class MainWindow(QMainWindow):
                 if total_points > 1000000:  # Only ask if > 1M points
                     reply = QMessageBox.question(
                         self,
-                        "Cargar Nube de Puntos",
-                        f"El archivo tiene {total_points:,} puntos.\n¿Deseas decirmarla al cargar para ahorrar memoria y tiempo?",
+                        tr("action.open"),
+                        tr("msg.decimate_question").format(total_points),
                         QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
                     )
                     if reply == QMessageBox.StandardButton.Yes:
                         target, ok = QInputDialog.getInt(
-                            self, "Decimar", "Número objetivo de puntos:",
+                            self, tr("msg.decimate_title"), tr("msg.target_points"),
                             min(5000000, total_points), 10000, total_points, 100000
                         )
                         if ok:
                             kwargs['max_points'] = target
             except Exception as e:
-                logger.warning(f"No se pudo leer la cabecera rápida de {file_path}: {e}")
+                logger.warning(f"Could not read quick header of {file_path}: {e}")
         elif ext in RASTER_EXTENSIONS:
             loader_func = RasterLayer.from_file
         else:
@@ -435,7 +435,7 @@ class MainWindow(QMainWindow):
 
         worker = FileLoadWorker(file_path, loader_func, **kwargs)
         
-        # Conectar señales
+        # Connect signals
         worker.signals.result.connect(lambda res: self._on_file_loaded(res, ext, file_path))
         worker.signals.error.connect(lambda err: self._on_file_load_error(err, file_path))
         
@@ -464,19 +464,19 @@ class MainWindow(QMainWindow):
         self.project.loaded_files.append(file_path)
 
     def _on_file_load_error(self, error_msg, file_path):
-        logger.error(f"Error cargando {file_path}: {error_msg}")
+        logger.error(f"Error loading {file_path}: {error_msg}")
         QMessageBox.critical(self, tr("error.processing_failed"), str(error_msg))
         self._update_status(tr("status.ready"))
 
     def _prompt_crs_assignment(self, pc: PointCloudData):
-        """Si el archivo no tiene CRS, preguntar al usuario."""
+        """If the file has no CRS, ask the user."""
         from PyQt6.QtWidgets import QInputDialog
         last_crs = self.preferences.last_crs
         default_text = str(last_crs) if last_crs else "25830"
 
         epsg_str, ok = QInputDialog.getText(
             self, tr("prop.crs"),
-            f"{tr('error.no_crs')}\n\nIntroduce el código EPSG:",
+            f"{tr('error.no_crs')}\n\n{tr('msg.enter_epsg')}",
             text=default_text,
         )
         if ok and epsg_str.strip().isdigit():
@@ -498,23 +498,23 @@ class MainWindow(QMainWindow):
         last_dir = self.preferences.get("last_export_dir", "")
         path, _ = QFileDialog.getSaveFileName(
             self, tr("action.save_project"), last_dir,
-            "Proyecto ALAS (*.alas)"
+            "ALAS Project (*.alas)"
         )
         if path:
             self.project.save(path)
-            self._update_status("Proyecto guardado")
+            self._update_status(tr("status.ready"))
 
     def _load_project(self):
         path, _ = QFileDialog.getOpenFileName(
             self, tr("action.load_project"), "",
-            "Proyecto ALAS (*.alas)"
+            "ALAS Project (*.alas)"
         )
         if path:
             try:
                 self.project = Project.load(path)
-                self._update_status("Proyecto cargado")
+                self._update_status(tr("status.ready"))
             except Exception as e:
-                QMessageBox.critical(self, "Error", str(e))
+                QMessageBox.critical(self, tr("crs.error"), str(e))
 
     # ==================================================================
     # Viewport interactions
@@ -554,7 +554,7 @@ class MainWindow(QMainWindow):
         from app.ui.dialogs.classification_dialog import ClassificationDialog
         entry = self.layer_manager.active_layer
         if not entry or not entry.is_point_cloud:
-            QMessageBox.information(self, "Info", "Selecciona una nube de puntos primero.")
+            QMessageBox.information(self, tr("dialog.info"), tr("msg.select_point_cloud"))
             return
         dlg = ClassificationDialog(entry.layer, self)
         if dlg.exec():
@@ -568,7 +568,7 @@ class MainWindow(QMainWindow):
         from app.ui.dialogs.dem_dialog import DEMDialog
         entry = self.layer_manager.active_layer
         if not entry or not entry.is_point_cloud:
-            QMessageBox.information(self, "Info", "Selecciona una nube de puntos primero.")
+            QMessageBox.information(self, tr("dialog.info"), tr("msg.select_point_cloud"))
             return
         dlg = DEMDialog(entry.layer, self)
         if dlg.exec():
@@ -602,7 +602,7 @@ class MainWindow(QMainWindow):
         from app.ui.dialogs.crs_dialog import CRSDialog
         entry = self.layer_manager.active_layer
         if not entry or not entry.is_point_cloud:
-            QMessageBox.information(self, "Info", "Selecciona una nube de puntos primero.")
+            QMessageBox.information(self, tr("dialog.info"), tr("msg.select_point_cloud"))
             return
         dlg = CRSDialog(entry.layer, self)
         dlg.exec()
@@ -610,7 +610,7 @@ class MainWindow(QMainWindow):
     def _merge_tiles(self):
         clouds = self.layer_manager.get_point_clouds()
         if len(clouds) < 2:
-            QMessageBox.information(self, "Info", "Se necesitan al menos 2 nubes para fusionar.")
+            QMessageBox.information(self, tr("dialog.info"), tr("msg.at_least_2_clouds"))
             return
         merged = PointCloudData.merge(clouds, "merged")
         self.layer_manager.add_layer(merged)
@@ -627,7 +627,7 @@ class MainWindow(QMainWindow):
             idx = self.layer_manager.add_layer(result)
             self._update_status(tr("status.ready"))
         except Exception as e:
-            QMessageBox.critical(self, "Error", str(e))
+            QMessageBox.critical(self, tr("crs.error"), str(e))
 
     def _decimate_cloud(self):
         entry = self.layer_manager.active_layer
@@ -635,7 +635,7 @@ class MainWindow(QMainWindow):
             return
         from PyQt6.QtWidgets import QInputDialog
         voxel, ok = QInputDialog.getDouble(
-            self, "Decimar", "Tamaño de voxel (m):", 0.5, 0.01, 100.0, 2
+            self, tr("msg.decimate_title"), tr("msg.voxel_size"), 0.5, 0.01, 100.0, 2
         )
         if ok:
             from app.processing.preprocessing import decimate
@@ -652,7 +652,7 @@ class MainWindow(QMainWindow):
 
     # --- Tools ---
     def _start_profile_tool(self):
-        logger.info("Herramienta de perfil activada")
+        logger.info("Profile tool activated")
         from app.ui.viewport.profile_tool import ProfileDialog
         
         if not hasattr(self, "_profile_dialog") or self._profile_dialog is None:
@@ -671,31 +671,31 @@ class MainWindow(QMainWindow):
         self._profile_dialog.raise_()
         self._profile_dialog.activateWindow()
         
-        # Habilitar selección de puntos para el perfil
+        # Enable point picking for profile
         self._profile_points = []
         def on_profile_pick(x, y, z):
             self._profile_points.append((x, y, z))
             if len(self._profile_points) == 1:
-                self._update_status("Selecciona el punto final del perfil")
+                self._update_status(tr("msg.profile_end"))
             elif len(self._profile_points) == 2:
                 p1, p2 = self._profile_points
-                # Dibujar línea final
+                # Draw final line
                 self.viewport.add_temporary_line(p1, p2, color="#ffff00")
                 
                 self._profile_dialog.set_coordinates(p1[0], p1[1], p2[0], p2[1])
                 self._profile_dialog._on_calculate()
                 self._profile_points = []
-                self._update_status("Perfil calculado. Pulsa Esc para limpiar.")
+                self._update_status(tr("msg.profile_calculated"))
 
         self.viewport.enable_point_picking(on_profile_pick)
-        self._update_status("Selecciona el punto de inicio del perfil")
+        self._update_status(tr("msg.profile_start"))
 
     def _start_distance_tool(self):
-        """Abre el modal de distancia y activa la herramienta en el viewport."""
-        logger.info("Herramienta de distancia activada")
+        """Opens the distance modal and activates the tool in the viewport."""
+        logger.info("Distance tool activated")
         from app.ui.viewport.distance_tool import DistanceToolDialog
 
-        # Crear el diálogo la primera vez
+        # Create the dialog the first time
         if not hasattr(self, "_distance_dialog") or self._distance_dialog is None:
             self._distance_dialog = DistanceToolDialog(self)
             self._distance_dialog.calculate_requested.connect(self._calculate_distance)
@@ -706,12 +706,12 @@ class MainWindow(QMainWindow):
         self._distance_dialog.raise_()
         self._distance_dialog.activateWindow()
 
-        # Activar picking en el viewport
+        # Activate picking in viewport
         self.viewport.enable_world_picking(self._on_distance_pick)
-        self._update_status("Selecciona el punto A en el visor")
+        self._update_status(tr("msg.distance_point_a"))
 
     def _on_distance_pick(self, x: float, y: float, z: float):
-        """Recibe cada punto seleccionado y lo pasa al modal."""
+        """Receives each selected point and passes it to the modal."""
         if not hasattr(self, "_distance_dialog") or self._distance_dialog is None:
             return
 
@@ -719,17 +719,17 @@ class MainWindow(QMainWindow):
         if num_points == 0:
             self._distance_dialog.add_point(x, y, z, "A")
             self.viewport.add_measurement_marker((x, y, z))
-            self._update_status("Punto A seleccionado. Selecciona el punto B")
+            self._update_status(tr("msg.distance_point_b"))
         elif num_points == 1:
             self._distance_dialog.add_point(x, y, z, "B")
             self.viewport.add_measurement_marker((x, y, z))
-            # Dibujar línea
+            # Draw line
             points = self._distance_dialog.get_points()
             self.viewport.add_measurement_line(points[0], points[1])
-            # El cálculo se hará automáticamente via signal
+            # Calculation will be done automatically via signal
 
     def _on_distance_clear(self):
-        """Limpia el viewport cuando el modal pide reiniciar."""
+        """Clears the viewport when the modal requests reset."""
         self.viewport.disable_tools()
         if hasattr(self, "_distance_dialog") and self._distance_dialog is not None and self._distance_dialog.isVisible():
             self._distance_dialog.reset()
@@ -737,7 +737,7 @@ class MainWindow(QMainWindow):
         self._update_status(tr("status.ready"))
 
     def _calculate_distance(self):
-        """Calcula la distancia entre los dos puntos y muestra los resultados en el modal."""
+        """Calculates the distance between the two points and shows results in the modal."""
         if not hasattr(self, "_distance_dialog") or self._distance_dialog is None:
             return
 
@@ -754,30 +754,29 @@ class MainWindow(QMainWindow):
         )
 
         self._update_status(
-            f"Distancia: {res['distance_3d']:.3f} m  |  "
-            f"2D: {res['distance_2d']:.3f} m  |  "
-            f"dZ: {res['dz']:.3f} m  |  "
-            f"Pendiente: {res['slope_degrees']:.1f} deg"
+            tr("status.distance").format(
+                res['distance_3d'], res['distance_2d'], res['dz'], res['slope_degrees']
+            )
         )
 
-        self._record_measurement("distancia", {
+        self._record_measurement("distance", {
             **res,
             "ax": p1[0], "ay": p1[1], "az": p1[2],
             "bx": p2[0], "by": p2[1], "bz": p2[2],
         })
 
         logger.info(
-            f"Distancia: 3D={res['distance_3d']:.3f}m  "
+            f"Distance: 3D={res['distance_3d']:.3f}m  "
             f"2D={res['distance_2d']:.3f}m  dZ={res['dz']:.3f}m"
         )
 
 
     def _start_area_tool(self):
-        """Abre el modal de área y activa la herramienta en el viewport."""
-        logger.info("Herramienta de área activada")
+        """Opens the area modal and activates the tool in the viewport."""
+        logger.info("Area tool activated")
         from app.ui.viewport.area_tool import AreaToolDialog
 
-        # Crear el diálogo la primera vez (o si fue destruido)
+        # Create the dialog the first time (or if it was destroyed)
         if self._area_dialog is None:
             self._area_dialog = AreaToolDialog(self)
             self._area_dialog.calculate_requested.connect(self._calculate_area)
@@ -789,46 +788,45 @@ class MainWindow(QMainWindow):
         self._area_dialog.raise_()
         self._area_dialog.activateWindow()
 
-        # Activar picking en el viewport
+        # Activate picking in viewport
         self.viewport.enable_area_tool(on_vertex_added=self._on_area_vertex_added)
-        self._update_status("Herramienta de área activa — haz clic en el terreno")
+        self._update_status(tr("msg.area_tool"))
 
     def _on_area_vertex_added(self, x: float, y: float, z: float):
-        """Recibe cada nuevo vértice del viewport y lo pasa al modal."""
+        """Receives each new vertex from the viewport and passes it to the modal."""
         if self._area_dialog is not None:
             self._area_dialog.add_vertex(x, y, z)
             n = len(self._area_dialog.get_vertices())
             self._update_status(
-                f"Área: {n} vértice{'s' if n != 1 else ''} "
-                f"— pulsa Calcular o Enter en el panel"
+                tr("msg.area_vertices").format(n, "es" if n != 1 else "")
             )
 
     def _on_area_clear(self):
-        """Limpia el viewport cuando el modal pide reiniciar."""
+        """Clears the viewport when the modal requests reset."""
         self.viewport.disable_tools()
-        # Re-activar la herramienta para seguir añadiendo vértices si el diálogo sigue abierto
+        # Re-activate the tool to continue adding vertices if the dialog is still open
         if self._area_dialog is not None and self._area_dialog.isVisible():
             self.viewport.enable_area_tool(on_vertex_added=self._on_area_vertex_added)
         self._update_status(tr("status.ready"))
 
     def _on_area_undo(self, vertices: list):
-        """Redibuja los vértices restantes tras deshacer."""
+        """Redraw the remaining vertices after undo."""
         self.viewport.disable_tools()
         if self._area_dialog is not None and self._area_dialog.isVisible():
             self.viewport.enable_area_tool(on_vertex_added=self._on_area_vertex_added)
-            # Redibujar los vértices restantes
+            # Redraw the remaining vertices
             for v in vertices:
                 self.viewport.add_measurement_marker(v)
-            # Redibujar líneas entre vértices consecutivos
+            # Redraw lines between consecutive vertices
             for i in range(len(vertices) - 1):
                 self.viewport.add_measurement_line(vertices[i], vertices[i + 1])
         n = len(vertices)
         self._update_status(
-            f"Área: {n} vértice{'s' if n != 1 else ''} — pulsa Calcular o Enter en el panel"
+            tr("msg.area_vertices").format(n, "es" if n != 1 else "")
         )
 
     def _calculate_area(self):
-        """Calcula el área del polígono y muestra los resultados en el modal."""
+        """Calculate the polygon area and show results in the modal."""
         if self._area_dialog is None:
             return
 
@@ -836,10 +834,10 @@ class MainWindow(QMainWindow):
         if len(vertices) < 3:
             return
 
-        # Dibujar línea de cierre visual en el viewport
+        # Draw visual closing line in viewport
         self.viewport.draw_closing_line()
 
-        # Calcular perímetro 2D
+        # Calculate 2D perimeter
         pts = np.array(vertices)
         diffs = np.diff(pts[:, :2], axis=0)
         seg_lengths = np.sqrt((diffs ** 2).sum(axis=1))
@@ -848,7 +846,7 @@ class MainWindow(QMainWindow):
         )
         perimeter = float(seg_lengths.sum() + closing)
 
-        # Buscar MDT (primer raster disponible)
+        # Search for DEM (first available raster)
         rasters = [e for e in self.layer_manager.get_all_entries() if e.is_raster]
         used_raster = bool(rasters)
 
@@ -860,12 +858,12 @@ class MainWindow(QMainWindow):
                 plan_m2   = res["planimetric_area_m2"]
                 surf_m2   = res["surface_area_m2"]
             except Exception as e:
-                logger.error(f"Error calculando área con MDT: {e}")
+                logger.error(f"Error calculating area with DEM: {e}")
                 used_raster = False
                 plan_m2 = self._shoelace_area(pts[:, :2])
                 surf_m2 = plan_m2
         else:
-            # Sin MDT: Shoelace sobre XY
+            # Without DEM: Shoelace on XY
             plan_m2 = self._shoelace_area(pts[:, :2])
             surf_m2 = plan_m2
 
@@ -876,14 +874,14 @@ class MainWindow(QMainWindow):
             used_raster=used_raster,
         )
         self._update_status(
-            f"Área calculada: {plan_m2:,.2f} m² | Perímetro: {perimeter:,.2f} m"
+            tr("msg.area_calculated").format(plan_m2, perimeter)
         )
         logger.info(
-            f"Área: plan={plan_m2:.2f}m² surf={surf_m2:.2f}m² "
+            f"Area: plan={plan_m2:.2f}m² surf={surf_m2:.2f}m² "
             f"per={perimeter:.2f}m verts={len(vertices)}"
         )
 
-        # ── Guardar en historial ──────────────────────────────────────
+        # ── Save to history ──────────────────────────────────────
         verts_as_dicts = [{"x": v[0], "y": v[1], "z": v[2]} for v in vertices]
         self._record_measurement("area", {
             "planimetric_area_m2": plan_m2,
@@ -896,13 +894,13 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def _shoelace_area(pts: np.ndarray) -> float:
-        """Fórmula de Shoelace para área planimétrica (sin MDT)."""
+        """Shoelace formula for planimetric area (without DEM)."""
         x, y = pts[:, 0], pts[:, 1]
         return float(abs(np.dot(x, np.roll(y, -1)) - np.dot(y, np.roll(x, -1))) / 2.0)
 
     def _start_volume_tool(self):
-        """Abre el modal de volumen y activa la herramienta en el viewport."""
-        logger.info("Herramienta de volumen activada")
+        """Open the volume modal and activate the tool in the viewport."""
+        logger.info("Volume tool activated")
         from app.ui.viewport.volume_tool import VolumeToolDialog
 
         if not hasattr(self, "_volume_dialog") or self._volume_dialog is None:
@@ -916,34 +914,33 @@ class MainWindow(QMainWindow):
         self._volume_dialog.raise_()
         self._volume_dialog.activateWindow()
 
-        # Activar picking en el viewport (reutiliza el picking de área)
+        # Activate picking in viewport (reuses area picking)
         self.viewport.enable_area_tool(on_vertex_added=self._on_volume_vertex_added)
-        self._update_status("Herramienta de volumen activa — haz clic en el terreno")
+        self._update_status(tr("msg.volume_tool_active"))
 
     def _on_volume_vertex_added(self, x: float, y: float, z: float):
-        """Recibe cada nuevo vértice del viewport y lo pasa al modal."""
+        """Receive each new vertex from the viewport and pass it to the modal."""
         if hasattr(self, "_volume_dialog") and self._volume_dialog is not None:
             self._volume_dialog.add_vertex(x, y, z)
             n = len(self._volume_dialog.get_vertices())
             self._update_status(
-                f"Volumen: {n} vértice{'s' if n != 1 else ''} "
-                f"— define Z y pulsa Calcular"
+                tr("msg.volume_vertices").format(n, "es" if n != 1 else "")
             )
 
     def _on_volume_clear_only_solid(self):
-        """Limpia unicamente el volumen 3D (para poder probar otras cotas sin rehacer polígono)."""
+        """Clear only the 3D volume (to test other elevations without redoing the polygon)."""
         self.viewport.clear_volume_graphics()
-        self._update_status("Volumen 3D ocultado. Puedes volver a calcular.")
+        self._update_status(tr("msg.volume_cleared"))
 
     def _on_volume_clear(self):
-        """Limpia el viewport cuando el modal pide reiniciar."""
+        """Clear the viewport when the modal requests reset."""
         self.viewport.disable_tools()
         if hasattr(self, "_volume_dialog") and self._volume_dialog is not None and self._volume_dialog.isVisible():
             self.viewport.enable_area_tool(on_vertex_added=self._on_volume_vertex_added)
         self._update_status(tr("status.ready"))
 
     def _calculate_volume(self):
-        """Calcula el volumen del polígono y muestra los resultados en el modal."""
+        """Calculate the polygon volume and show results in the modal."""
         if not hasattr(self, "_volume_dialog") or self._volume_dialog is None:
             return
 
@@ -953,13 +950,13 @@ class MainWindow(QMainWindow):
 
         z_ref = self._volume_dialog.get_reference_z()
 
-        # Dibujar línea de cierre visual en el viewport
+        # Draw visual closing line in viewport
         self.viewport.draw_closing_line()
 
-        # Buscar MDT (primer raster disponible)
+        # Search for DEM (first available raster)
         rasters = [e for e in self.layer_manager.get_all_entries() if e.is_raster]
         if not rasters:
-            self._volume_dialog.show_error("Se requiere una capa Raster (MDT) cargada.")
+            self._volume_dialog.show_error(tr("msg.volume_no_dem"))
             return
 
         from app.processing.measurements import calculate_volume
@@ -975,9 +972,9 @@ class MainWindow(QMainWindow):
             area = res['area_m2']
 
             self._volume_dialog.show_results(cut, fill, net, area)
-            self._update_status(f"Volumen calculado: Neto {net:,.2f} m³ (Z ref={z_ref:,.2f})")
+            self._update_status(tr("msg.volume_calculated").format(net, z_ref))
 
-            # Dibujar la region 3D en el viewport
+            # Draw the 3D region in the viewport
             if 'grid_x' in res:
                 self.viewport.display_volume_region(
                     res['grid_x'], 
@@ -986,39 +983,39 @@ class MainWindow(QMainWindow):
                     z_ref
                 )
 
-            # Remover datos pesados antes de guardar en historial
+            # Remove heavy data before saving to history
             hist_data = {k: v for k, v in res.items() if k not in ('grid_x', 'grid_y', 'grid_z')}
 
-            # Guardar en historial
+            # Save to history
             verts_as_dicts = [{"x": v[0], "y": v[1], "z": v[2]} for v in vertices]
-            self._record_measurement("volumen", {
+            self._record_measurement("volume", {
                 **hist_data,
                 "reference_z": z_ref,
                 "num_vertices": len(vertices),
                 "vertices": verts_as_dicts,
             })
         except Exception as e:
-            logger.error(f"Error calculando volumen: {e}")
+            logger.error(f"Error calculating volume: {e}")
             self._volume_dialog.show_error(f"Error: {str(e)}")
 
     # --- Measurements history ---
     def _get_measurements_dialog(self):
-        """Crea el diálogo de historial la primera vez (lazy)."""
+        """Create the history dialog the first time (lazy)."""
         if self._measurements_dialog is None:
             from app.ui.dialogs.measurements_history_dialog import MeasurementsHistoryDialog
             self._measurements_dialog = MeasurementsHistoryDialog(self)
         return self._measurements_dialog
 
     def _show_measurements_history(self):
-        """Abre el modal de historial de medidas."""
+        """Open the measurements history modal."""
         dlg = self._get_measurements_dialog()
         dlg.show_and_raise()
 
     def _record_measurement(self, mtype: str, data: dict):
-        """Guarda una medida en el historial (no abre el modal)."""
+        """Save a measurement to history (does not open the modal)."""
         dlg = self._get_measurements_dialog()
         dlg.add_measurement(mtype, data)
-        logger.info(f"Medida '{mtype}' registrada en el historial.")
+        logger.info(f"Measurement '{mtype}' registered in history.")
 
     # --- Export ---
     def _show_export_dialog(self):
@@ -1042,7 +1039,7 @@ class MainWindow(QMainWindow):
             f"<h2>{APP_NAME} v{APP_VERSION}</h2>"
             f"<p>{APP_FULL_NAME}</p>"
             f"<p>{tr('dialog.about_text')}</p>"
-            f"<p>Python + PyQt6 + PyVista + PDAL</p>"
+            f"<p>{tr('msg.app_info')}</p>"
         )
 
     # --- Language ---
@@ -1050,9 +1047,8 @@ class MainWindow(QMainWindow):
         set_language(lang)
         self.preferences.set("language", lang)
         QMessageBox.information(
-            self, "Idioma / Language",
-            "El cambio de idioma se aplicará completamente al reiniciar la aplicación.\n"
-            "Language change will be fully applied after restarting."
+            self, tr("menu.language"),
+            f"{tr('msg.language_change')}\n{tr('msg.language_change_restart')}"
         )
 
     # ==================================================================

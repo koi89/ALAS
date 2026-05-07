@@ -1,6 +1,6 @@
 """
 ALAS — Classification
-Clasificación automática del terreno usando PDAL (SMRF, CSF, PMF).
+Automatic terrain classification using PDAL (SMRF, CSF, PMF).
 """
 
 import json
@@ -26,8 +26,8 @@ def classify_ground_smrf(pc: PointCloudData,
                           threshold: float = None,
                           scalar: float = None) -> np.ndarray:
     """
-    Clasificación de suelo usando SMRF (Simple Morphological Filter).
-    Devuelve array de clasificación actualizado.
+    Ground classification using SMRF (Simple Morphological Filter).
+    Returns updated classification array.
     """
     params = {
         "window": window or SMRF_DEFAULTS["window"],
@@ -35,7 +35,7 @@ def classify_ground_smrf(pc: PointCloudData,
         "threshold": threshold or SMRF_DEFAULTS["threshold"],
         "scalar": scalar or SMRF_DEFAULTS["scalar"],
     }
-    logger.info(f"Clasificando suelo (SMRF): {params}")
+    logger.info(f"Classifying ground (SMRF): {params}")
     return _run_ground_classification(pc, "filters.smrf", params)
 
 
@@ -45,8 +45,8 @@ def classify_ground_csf(pc: PointCloudData,
                          rigidness: int = None,
                          iterations: int = None) -> np.ndarray:
     """
-    Clasificación de suelo usando CSF (Cloth Simulation Filter).
-    Devuelve array de clasificación actualizado.
+    Ground classification using CSF (Cloth Simulation Filter).
+    Returns updated classification array.
     """
     params = {
         "resolution": resolution or CSF_DEFAULTS["resolution"],
@@ -54,7 +54,7 @@ def classify_ground_csf(pc: PointCloudData,
         "rigidness": rigidness or CSF_DEFAULTS["rigidness"],
         "iterations": iterations or CSF_DEFAULTS["iterations"],
     }
-    logger.info(f"Clasificando suelo (CSF): {params}")
+    logger.info(f"Classifying ground (CSF): {params}")
     return _run_ground_classification(pc, "filters.csf", params)
 
 
@@ -64,8 +64,8 @@ def classify_ground_pmf(pc: PointCloudData,
                          initial_distance: float = None,
                          max_distance: float = None) -> np.ndarray:
     """
-    Clasificación de suelo usando PMF (Progressive Morphological Filter).
-    Devuelve array de clasificación actualizado.
+    Ground classification using PMF (Progressive Morphological Filter).
+    Returns updated classification array.
     """
     params = {
         "max_window_size": max_window_size or PMF_DEFAULTS["max_window_size"],
@@ -73,19 +73,19 @@ def classify_ground_pmf(pc: PointCloudData,
         "initial_distance": initial_distance or PMF_DEFAULTS["initial_distance"],
         "max_distance": max_distance or PMF_DEFAULTS["max_distance"],
     }
-    logger.info(f"Clasificando suelo (PMF): {params}")
+    logger.info(f"Classifying ground (PMF): {params}")
     return _run_ground_classification(pc, "filters.pmf", params)
 
 
 def _run_ground_classification(pc: PointCloudData, filter_type: str,
                                 params: dict) -> np.ndarray:
-    """Ejecuta un pipeline PDAL de clasificacion de suelo."""
+    """Executes a PDAL ground classification pipeline."""
     import pdal
     import os
 
-    # Directorio temporal garantizado ASCII en Mac/Win/Linux
+    # Temporary directory with guaranteed ASCII path on Mac/Win/Linux
     tmp_dir = Path(os.environ.get("TMPDIR", tempfile.gettempdir()))
-    # Si la ruta tiene caracteres no-ASCII, caer a /tmp (Mac/Linux) o C:\Temp (Win)
+    # If the path has non-ASCII characters, fall back to /tmp (Mac/Linux) or C:\Temp (Win)
     try:
         str(tmp_dir).encode("ascii")
     except UnicodeEncodeError:
@@ -112,17 +112,17 @@ def _run_ground_classification(pc: PointCloudData, filter_type: str,
             },
         ]
 
-        # Serializar limpio, escapar cualquier non-ASCII
+        # Serialize cleanly, escape any non-ASCII
         pipeline_json = json.dumps(pipeline_def, ensure_ascii=True)
 
-        # Guardia: reventar antes de que lo haga PDAL
+        # Guard: fail before PDAL does
         pipeline_json.encode("ascii")
 
         print(repr(pipeline_json[1580:1610]))
 
         pipeline = pdal.Pipeline(pipeline_json)
         count = pipeline.execute()
-        logger.info(f"Clasificacion completada: {count:,} puntos procesados")
+        logger.info(f"Classification completed: {count:,} points processed")
 
         result = PointCloudData.from_file(str(tmp_out))
         classification = result.classification
@@ -130,7 +130,7 @@ def _run_ground_classification(pc: PointCloudData, filter_type: str,
         ground_count = np.sum(classification == 2)
         total = len(classification)
         pct = (ground_count / total * 100) if total > 0 else 0
-        logger.info(f"Suelo: {ground_count:,} puntos ({pct:.1f}%)")
+        logger.info(f"Ground: {ground_count:,} points ({pct:.1f}%)")
 
         return classification
 
@@ -141,27 +141,27 @@ def _run_ground_classification(pc: PointCloudData, filter_type: str,
 
 def classify_above_ground(pc: PointCloudData) -> np.ndarray:
     """
-    Clasifica puntos sobre el suelo en categorías:
-    vegetación baja/media/alta y edificios.
-    Requiere que el suelo ya esté clasificado (class 2).
+    Classifies above-ground points into categories:
+    low/medium/high vegetation and buildings.
+    Requires ground to already be classified (class 2).
     """
     if pc.classification is None:
-        raise ValueError("La nube necesita clasificación previa de suelo.")
+        raise ValueError("Cloud needs prior ground classification.")
 
-    logger.info("Clasificando puntos sobre el suelo...")
+    logger.info("Classifying above-ground points...")
     classification = pc.classification.copy()
 
-    # Calcular altura sobre el suelo
+    # Calculate height above ground
     ground_mask = classification == 2
     if not ground_mask.any():
-        logger.warning("No hay puntos de suelo clasificados")
+        logger.warning("No classified ground points")
         return classification
 
     ground_z = pc.xyz[ground_mask, 2]
     ground_xy = pc.xyz[ground_mask, :2]
 
-    # Interpolación simple: para cada punto no-suelo, encontrar el Z
-    # del punto de suelo más cercano
+    # Simple interpolation: for each non-ground point, find the Z
+    # of the nearest ground point
     from scipy.spatial import cKDTree
 
     ground_tree = cKDTree(ground_xy)
@@ -173,10 +173,10 @@ def classify_above_ground(pc: PointCloudData) -> np.ndarray:
     ground_z_at_points = ground_z[indices]
     height_above_ground = non_ground_z - ground_z_at_points
 
-    # Clasificar por altura
+    # Classify by height
     ng_class = classification[non_ground_mask]
 
-    # Solo clasificar los que son class 1 (sin clasificar)
+    # Only classify those that are class 1 (unclassified)
     unclassified = (ng_class == 0) | (ng_class == 1)
 
     low_veg = unclassified & (height_above_ground > 0) & (height_above_ground <= LOW_VEG_MAX_HEIGHT)
@@ -190,20 +190,20 @@ def classify_above_ground(pc: PointCloudData) -> np.ndarray:
     classification[non_ground_mask] = ng_class
 
     # Log stats
-    for code, name in [(3, "Veg. baja"), (4, "Veg. media"), (5, "Veg. alta")]:
+    for code, name in [(3, "Low veg."), (4, "Med. veg."), (5, "High veg.")]:
         count = np.sum(classification == code)
-        logger.info(f"  {name}: {count:,} puntos")
+        logger.info(f"  {name}: {count:,} points")
 
     return classification
 
 
 def manual_reclassify(pc: PointCloudData, indices: np.ndarray,
                       new_class: int) -> np.ndarray:
-    """Reclasifica manualmente un conjunto de puntos."""
+    """Manually reclassifies a set of points."""
     if pc.classification is None:
         pc.classification = np.zeros(pc.point_count, dtype=np.uint8)
 
     classification = pc.classification.copy()
     classification[indices] = new_class
-    logger.info(f"Reclasificados {len(indices):,} puntos → clase {new_class}")
+    logger.info(f"Reclassified {len(indices):,} points → class {new_class}")
     return classification
