@@ -430,6 +430,41 @@ class PointCloudData:
             "median": float(np.median(z)),
         }
 
+    def hag_stats(self) -> Dict[str, float]:
+        """Height Above Ground statistics using nearest ground point (class 2) interpolation."""
+        if self.xyz is None or self.classification is None:
+            return {}
+
+        ground_mask = self.classification == 2
+        if not ground_mask.any():
+            return {}
+
+        from scipy.spatial import cKDTree
+
+        ground_xy = self.xyz[ground_mask, :2]
+        ground_z = self.xyz[ground_mask, 2]
+
+        all_xy = self.xyz[:, :2]
+        all_z = self.xyz[:, 2]
+
+        ground_tree = cKDTree(ground_xy)
+        _, indices = ground_tree.query(all_xy, k=1)
+        hag = all_z - ground_z[indices]
+
+        non_ground_hag = hag[~ground_mask]
+        if len(non_ground_hag) == 0:
+            return {}
+
+        return {
+            "min": float(non_ground_hag.min()),
+            "max": float(non_ground_hag.max()),
+            "mean": float(non_ground_hag.mean()),
+            "std": float(non_ground_hag.std()),
+            "median": float(np.median(non_ground_hag)),
+            "ground_points": int(ground_mask.sum()),
+            "non_ground_points": int((~ground_mask).sum()),
+        }
+
     # ------------------------------------------------------------------
     # Merge
     # ------------------------------------------------------------------

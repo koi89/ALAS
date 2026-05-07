@@ -75,6 +75,19 @@ class StatisticsPanel(QWidget):
             form.addRow("Rango", QLabel(f"{stats['max'] - stats['min']:.2f} m"))
             self._layout.addWidget(grp)
 
+        hag = pc.hag_stats()
+        if hag:
+            grp_hag = QGroupBox("HAG Normalization (Height Above Ground)")
+            form_h = QFormLayout(grp_hag)
+            form_h.addRow("Min", QLabel(f"{hag['min']:.2f} m"))
+            form_h.addRow("Max", QLabel(f"{hag['max']:.2f} m"))
+            form_h.addRow("Mean", QLabel(f"{hag['mean']:.2f} m"))
+            form_h.addRow("Median", QLabel(f"{hag['median']:.2f} m"))
+            form_h.addRow("Std Dev", QLabel(f"{hag['std']:.2f} m"))
+            form_h.addRow("Ground pts", QLabel(f"{hag['ground_points']:,}"))
+            form_h.addRow("Non-ground pts", QLabel(f"{hag['non_ground_points']:,}"))
+            self._layout.addWidget(grp_hag)
+
         grp_gen = QGroupBox("General")
         form_g = QFormLayout(grp_gen)
         form_g.addRow("Total puntos", QLabel(f"{pc.point_count:,}"))
