@@ -263,7 +263,7 @@ class MeasurementsHistoryDialog(QDialog):
             QDialog {
                 background: #0a0a0a;
                 color: #d0d0d0;
-                font-family: 'Segoe UI', sans-serif;
+                font-family: 'SF Pro Display', 'Segoe UI', 'Ubuntu', 'Helvetica Neue', sans-serif;
                 font-size: 13px;
             }
 
