@@ -1,6 +1,6 @@
 """
 ALAS — Preprocessing
-Fusion, filtrado de ruido, reproyeccion y decimado de nubes de puntos.
+Merge, noise filtering, reprojection and decimation of point clouds.
 """
 
 import json
@@ -17,7 +17,7 @@ logger = get_logger("processing.preprocessing")
 
 
 def _get_ascii_tmpdir() -> Path:
-    """Devuelve un directorio temporal con ruta ASCII garantizada (Mac/Win/Linux)."""
+    """Return a temporary directory with guaranteed ASCII path (Mac/Win/Linux)."""
     tmp_dir = Path(os.environ.get("TMPDIR", tempfile.gettempdir()))
     try:
         str(tmp_dir).encode("ascii")
@@ -31,25 +31,25 @@ def _get_ascii_tmpdir() -> Path:
 def filter_noise(pc: PointCloudData, method: str = "statistical",
                  k: int = 8, multiplier: float = 2.0) -> PointCloudData:
     """
-    Filtra puntos de ruido (outliers).
-    method: 'statistical' (SOR) o 'radius'
+    Filter noise points (outliers).
+    method: 'statistical' (SOR) or 'radius'
     """
-    logger.info(f"Filtrando ruido ({method}, k={k}, mult={multiplier})")
+    logger.info(f"Filtering noise ({method}, k={k}, mult={multiplier})")
 
-    # Usamos numpy SOR directamente — el PDAL filters.outlier reclasifica
-    # todos los puntos ignorando el 'where', destruyendo Overlap y otras clases
+    # We use numpy SOR directly — PDAL filters.outlier reclassifies
+    # all points ignoring 'where', destroying Overlap and other classes
     result = _numpy_sor(pc, k, multiplier)
 
     logger.info(
-        f"Ruido filtrado: {pc.point_count:,} -> {result.point_count:,} "
-        f"({pc.point_count - result.point_count:,} eliminados)"
+        f"Noise filtered: {pc.point_count:,} -> {result.point_count:,} "
+        f"({pc.point_count - result.point_count:,} removed)"
     )
     return result
 
 
 def _pdal_filter_noise_sor(pc: PointCloudData, k: int,
                             multiplier: float) -> PointCloudData:
-    """Filtrado SOR usando PDAL pipeline."""
+    """SOR filtering using PDAL pipeline."""
     import pdal
 
     tmp_dir = _get_ascii_tmpdir()
@@ -67,19 +67,19 @@ def _pdal_filter_noise_sor(pc: PointCloudData, k: int,
                 "method": "statistical",
                 "mean_k": k,
                 "multiplier": multiplier,
-                # Solo actuar sobre puntos sin clasificar, respetar Ground,
-                # Vegetation, Building, Overlap (clase 12), etc.
+                # Only act on unclassified points, respect Ground,
+                # Vegetation, Building, Overlap (class 12), etc.
                 "where": "Classification == 0 || Classification == 1",
             },
             {
                 "type": "filters.range",
-                # Excluir solo clase 7 (noise marcado por PDAL), conservar todo lo demas
+                # Exclude only class 7 (noise marked by PDAL), keep everything else
                 "limits": "Classification![7:7]",
             },
             {"type": "writers.las", "filename": tmp_out.as_posix()},
         ], ensure_ascii=True)
 
-        # Guardia: verificar que el JSON es ASCII puro antes de pasarlo a PDAL
+        # Guard: verify that JSON is pure ASCII before passing to PDAL
         pipeline_json.encode("ascii")
 
         pipeline = pdal.Pipeline(pipeline_json)
@@ -97,12 +97,12 @@ def _pdal_filter_noise_sor(pc: PointCloudData, k: int,
 
 
 def _numpy_sor(pc: PointCloudData, k: int, multiplier: float) -> PointCloudData:
-    """SOR simple con numpy + scipy (sin PDAL)."""
+    """Simple SOR with numpy + scipy (without PDAL)."""
     from scipy.spatial import cKDTree
 
     tree = cKDTree(pc.xyz)
     distances, _ = tree.query(pc.xyz, k=k + 1)
-    mean_dists = distances[:, 1:].mean(axis=1)  # Excluir distancia a si mismo
+    mean_dists = distances[:, 1:].mean(axis=1)  # Exclude distance to self
 
     global_mean = mean_dists.mean()
     global_std = mean_dists.std()
@@ -116,10 +116,10 @@ def _numpy_sor(pc: PointCloudData, k: int, multiplier: float) -> PointCloudData:
 
 def reproject(pc: PointCloudData, source_epsg: int,
               target_epsg: int) -> PointCloudData:
-    """Reproyecta una nube de puntos de un CRS a otro usando PDAL."""
+    """Reproject a point cloud from one CRS to another using PDAL."""
     import pdal
 
-    logger.info(f"Reproyectando EPSG:{source_epsg} -> EPSG:{target_epsg}")
+    logger.info(f"Reprojecting EPSG:{source_epsg} -> EPSG:{target_epsg}")
 
     tmp_dir = _get_ascii_tmpdir()
     uid = id(pc)
@@ -163,10 +163,10 @@ def decimate(pc: PointCloudData, method: str = "voxel",
              voxel_size: float = 0.5,
              target_count: int = None) -> PointCloudData:
     """
-    Decima una nube de puntos.
-    method: 'voxel' o 'random'
+    Decimate a point cloud.
+    method: 'voxel' or 'random'
     """
-    logger.info(f"Decimando ({method}, voxel={voxel_size}m)")
+    logger.info(f"Decimating ({method}, voxel={voxel_size}m)")
 
     if method == "voxel":
         result = pc.decimate_for_display(
@@ -183,34 +183,34 @@ def decimate(pc: PointCloudData, method: str = "voxel",
         result = pc.subset(mask)
 
     result.name = f"{pc.name}_decimated"
-    logger.info(f"Decimado: {pc.point_count:,} -> {result.point_count:,}")
+    logger.info(f"Decimated: {pc.point_count:,} -> {result.point_count:,}")
     return result
 
 
 def merge_tiles(clouds: list) -> PointCloudData:
-    """Fusiona multiples nubes de puntos."""
+    """Merge multiple point clouds."""
     return PointCloudData.merge(clouds, "merged")
 
 def handle_overlap(pc: PointCloudData, strategy: str = "auto") -> PointCloudData:
     """
-    Gestiona puntos de Overlap (clase 12) según el tipo de sensor.
+    Handle Overlap points (class 12) according to sensor type.
     
     strategy:
-        'auto'   — decide según sensor_type
-        'remove' — elimina directamente
+        'auto'   — decide based on sensor_type
+        'remove' — remove directly
         'dedup'  — voxel deduplication
-        'keep'   — no hace nada
+        'keep'   — do nothing
     """
     if pc.classification is None:
         return pc
 
     overlap_count = int(np.sum(pc.classification == 12))
     if overlap_count == 0:
-        logger.info("No hay puntos de Overlap (clase 12)")
+        logger.info("No Overlap points (class 12)")
         return pc
 
     overlap_pct = overlap_count / pc.point_count * 100
-    logger.info(f"Overlap detectado: {overlap_count:,} puntos ({overlap_pct:.1f}%)")
+    logger.info(f"Overlap detected: {overlap_count:,} points ({overlap_pct:.1f}%)")
 
     if strategy == "auto":
         sensor = pc.sensor_type
@@ -219,7 +219,7 @@ def handle_overlap(pc: PointCloudData, strategy: str = "auto") -> PointCloudData
         elif sensor in ("tls", "bathymetric"):
             strategy = "keep"
         elif sensor == "aerial":
-            # Aéreo: si densidad alta (>3 pts/m²) eliminar, si baja dedup
+            # Aerial: if high density (>3 pts/m²) remove, if low dedup
             bounds = pc.bounds
             if bounds:
                 area = (bounds[3] - bounds[0]) * (bounds[4] - bounds[1])
@@ -228,43 +228,43 @@ def handle_overlap(pc: PointCloudData, strategy: str = "auto") -> PointCloudData
             else:
                 strategy = "remove"
         else:
-            strategy = "dedup"  # unknown: conservador
-        logger.info(f"Sensor '{pc.sensor_type}' → estrategia overlap: {strategy}")
+            strategy = "dedup"  # unknown: conservative
+        logger.info(f"Sensor '{pc.sensor_type}' → overlap strategy: {strategy}")
 
     if strategy == "keep":
-        logger.info("Overlap conservado sin cambios")
+        logger.info("Overlap kept unchanged")
         return pc
 
     elif strategy == "remove":
         mask = pc.classification != 12
         result = pc.subset(mask)
         result.name = f"{pc.name}_no_overlap"
-        logger.info(f"Overlap eliminado: {overlap_count:,} puntos")
+        logger.info(f"Overlap removed: {overlap_count:,} points")
         return result
 
     elif strategy == "dedup":
-        # Separar overlap del resto
+        # Separate overlap from the rest
         overlap_mask = pc.classification == 12
         non_overlap = pc.subset(~overlap_mask)
         overlap_pc = pc.subset(overlap_mask)
 
-        # Voxel dedup solo sobre los overlap
+        # Voxel dedup only on overlap
         bounds = pc.bounds
         if bounds:
             area = (bounds[3] - bounds[0]) * (bounds[4] - bounds[1])
             density = overlap_count / area if area > 0 else 0
-            # Tamaño de voxel adaptativo según densidad
+            # Adaptive voxel size according to density
             voxel_size = max(0.1, min(0.5, 1.0 / density ** 0.5)) if density > 0 else 0.25
         else:
             voxel_size = 0.25
 
         deduped = overlap_pc.decimate_for_display(voxel_size=voxel_size)
-        # Mantener clase 12 — no reclasificar, solo reducir densidad
+        # Keep class 12 — do not reclassify, only reduce density
         result = PointCloudData.merge([non_overlap, deduped], f"{pc.name}_deduped")
         result.crs_wkt = pc.crs_wkt
         result.crs_epsg = pc.crs_epsg
         removed = overlap_count - int(np.sum(deduped.classification == 12))
-        logger.info(f"Overlap dedup: {overlap_count:,} → {np.sum(deduped.classification == 12):,} puntos ({removed:,} eliminados)")
+        logger.info(f"Overlap dedup: {overlap_count:,} → {np.sum(deduped.classification == 12):,} points ({removed:,} removed)")
         return result
 
     return pc

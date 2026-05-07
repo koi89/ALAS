@@ -1,6 +1,6 @@
 """
 ALAS — RasterLayer
-Wrapper sobre rasterio para capas raster georreferenciadas.
+Wrapper over rasterio for georeferenced raster layers.
 """
 
 import numpy as np
@@ -18,8 +18,8 @@ logger = get_logger("core.raster_layer")
 
 class RasterLayer:
     """
-    Wrapper para datos raster georreferenciados.
-    Almacena array NumPy 2D + metadatos de georreferenciación.
+    Wrapper for georeferenced raster data.
+    Stores 2D NumPy array + georeferencing metadata.
     """
 
     def __init__(self):
@@ -28,7 +28,7 @@ class RasterLayer:
         self.crs: Optional[CRS] = None               # rasterio CRS
         self.nodata: float = DEFAULT_NODATA
         self.file_path: Optional[str] = None
-        self.name: str = "Sin nombre"
+        self.name: str = "Unnamed"
         self.band_names: list = []
         self.dtype = np.float32
 
@@ -74,7 +74,7 @@ class RasterLayer:
 
     @property
     def bounds(self) -> Optional[Tuple[float, float, float, float]]:
-        """Devuelve (xmin, ymin, xmax, ymax)."""
+        """Returns (xmin, ymin, xmax, ymax)."""
         if self.transform is None or self.data is None:
             return None
         left = self.transform.c
@@ -99,12 +99,12 @@ class RasterLayer:
 
     @classmethod
     def from_file(cls, path: str) -> "RasterLayer":
-        """Lee un archivo raster (GeoTIFF) y devuelve RasterLayer."""
+        """Reads a raster file (GeoTIFF) and returns RasterLayer."""
         path = Path(path)
         if not path.exists():
-            raise FileNotFoundError(f"Archivo no encontrado: {path}")
+            raise FileNotFoundError(f"File not found: {path}")
 
-        logger.info(f"Leyendo raster: {path.name}")
+        logger.info(f"Reading raster: {path.name}")
 
         rl = cls()
         rl.file_path = str(path)
@@ -122,16 +122,16 @@ class RasterLayer:
                              for i in range(src.count)]
 
         logger.info(
-            f"Raster cargado: {rl.width}x{rl.height} | "
+            f"Raster loaded: {rl.width}x{rl.height} | "
             f"CRS: EPSG:{rl.crs_epsg or '?'} | "
-            f"Resolución: {rl.resolution}"
+            f"Resolution: {rl.resolution}"
         )
         return rl
 
     def to_geotiff(self, path: str, compress: str = None):
-        """Exporta como GeoTIFF."""
+        """Exports as GeoTIFF."""
         if self.data is None:
-            raise ValueError("No hay datos para exportar.")
+            raise ValueError("No data to export.")
 
         compress = compress or DEFAULT_GEOTIFF_COMPRESS
         path = Path(path)
@@ -145,7 +145,7 @@ class RasterLayer:
         height = write_data.shape[1]
         width = write_data.shape[2]
 
-        logger.info(f"Exportando GeoTIFF: {path.name} ({width}x{height}, {count} bandas)")
+        logger.info(f"Exporting GeoTIFF: {path.name} ({width}x{height}, {count} bands)")
 
         with rasterio.open(
             str(path), "w",
@@ -164,7 +164,7 @@ class RasterLayer:
                 if i < len(self.band_names):
                     dst.set_band_description(i + 1, self.band_names[i])
 
-        logger.info(f"GeoTIFF guardado: {path}")
+        logger.info(f"GeoTIFF saved: {path}")
 
     # ------------------------------------------------------------------
     # Factory: from numpy array + bounds
@@ -177,7 +177,7 @@ class RasterLayer:
                    nodata: float = None,
                    name: str = "raster") -> "RasterLayer":
         """
-        Crea un RasterLayer desde un array NumPy y extensión geográfica.
+        Creates a RasterLayer from a NumPy array and geographic extent.
         bounds: (xmin, ymin, xmax, ymax)
         """
         rl = cls()
@@ -203,7 +203,7 @@ class RasterLayer:
     # ------------------------------------------------------------------
 
     def statistics(self) -> Dict[str, float]:
-        """Estadísticas básicas del raster (ignorando nodata)."""
+        """Basic raster statistics (ignoring nodata)."""
         if self.data is None:
             return {}
         arr = self.data
@@ -223,9 +223,9 @@ class RasterLayer:
         }
 
     def get_band(self, band: int = 0) -> np.ndarray:
-        """Devuelve una banda como array 2D."""
+        """Returns a band as a 2D array."""
         if self.data is None:
-            raise ValueError("No hay datos.")
+            raise ValueError("No data.")
         if self.data.ndim == 2:
             return self.data
         return self.data[band]

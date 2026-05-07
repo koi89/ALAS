@@ -1,6 +1,6 @@
 """
 ALAS — CRS Dialog
-Diálogo para reproyección de coordenadas.
+Dialog for coordinate reprojection.
 """
 
 from PyQt6.QtWidgets import (
@@ -18,7 +18,7 @@ logger = get_logger("ui.crs_dialog")
 
 
 class CRSDialog(QDialog):
-    """Diálogo de reproyección CRS."""
+    """CRS reprojection dialog."""
 
     def __init__(self, point_cloud: PointCloudData, parent=None):
         super().__init__(parent)
@@ -31,40 +31,37 @@ class CRSDialog(QDialog):
         layout = QVBoxLayout(self)
 
         # Current CRS
-        grp_current = QGroupBox("CRS actual")
+        grp_current = QGroupBox(tr("crs.current"))
         form_c = QFormLayout(grp_current)
 
-        current_epsg = self.pc.crs_epsg or "Desconocido"
-        self._current_label = QLabel(f"EPSG:{current_epsg}")
+        current_epsg = self.pc.crs_epsg or "Unknown"
+        self._current_label = QLabel(f"{tr('crs.epsg_prefix')}{current_epsg}")
         self._current_label.setStyleSheet("color: #a855f7; font-weight: 600;")
-        form_c.addRow("Sistema actual", self._current_label)
+        form_c.addRow(tr("crs.current_system"), self._current_label)
 
         layout.addWidget(grp_current)
 
-        # Source EPSG (editable si no hay CRS)
-        grp_source = QGroupBox("EPSG de origen")
+        # Source EPSG (editable if no CRS)
+        grp_source = QGroupBox(tr("crs.source"))
         form_s = QFormLayout(grp_source)
 
         self._source_epsg = QSpinBox()
         self._source_epsg.setRange(1000, 99999)
         self._source_epsg.setValue(self.pc.crs_epsg or 25830)
-        form_s.addRow("EPSG origen", self._source_epsg)
+        form_s.addRow(tr("crs.source_epsg"), self._source_epsg)
         layout.addWidget(grp_source)
 
         # Target EPSG
-        grp_target = QGroupBox("EPSG de destino")
+        grp_target = QGroupBox(tr("crs.target"))
         form_t = QFormLayout(grp_target)
 
         self._target_epsg = QSpinBox()
         self._target_epsg.setRange(1000, 99999)
         self._target_epsg.setValue(25830)
-        form_t.addRow("EPSG destino", self._target_epsg)
+        form_t.addRow(tr("crs.target_epsg"), self._target_epsg)
 
         # Common CRS shortcuts
-        common_label = QLabel(
-            "Comunes: 4326 (WGS84) | 25830 (ETRS89 UTM 30N) | "
-            "25829 (UTM 29N) | 32630 (WGS84 UTM 30N)"
-        )
+        common_label = QLabel(tr("crs.common"))
         common_label.setObjectName("muted")
         common_label.setWordWrap(True)
         form_t.addRow("", common_label)
@@ -81,7 +78,7 @@ class CRSDialog(QDialog):
         btn_cancel.clicked.connect(self.reject)
         btn_layout.addWidget(btn_cancel)
 
-        btn_reproject = QPushButton("Reproyectar")
+        btn_reproject = QPushButton(tr("crs.reproject_button"))
         btn_reproject.setObjectName("primary")
         btn_reproject.clicked.connect(self._do_reproject)
         btn_layout.addWidget(btn_reproject)
@@ -93,7 +90,7 @@ class CRSDialog(QDialog):
         target = self._target_epsg.value()
 
         if source == target:
-            QMessageBox.information(self, "Info", "Origen y destino son iguales.")
+            QMessageBox.information(self, tr("crs.same_epsg"), tr("crs.same_epsg_msg"))
             return
 
         try:
@@ -106,10 +103,10 @@ class CRSDialog(QDialog):
             self.pc.name = result.name
 
             QMessageBox.information(
-                self, "Completado",
-                f"Reproyectado de EPSG:{source} a EPSG:{target}"
+                self, tr("crs.completed"),
+                tr("crs.reprojected").format(source, target)
             )
             self.accept()
 
         except Exception as e:
-            QMessageBox.critical(self, "Error", str(e))
+            QMessageBox.critical(self, tr("crs.error"), str(e))

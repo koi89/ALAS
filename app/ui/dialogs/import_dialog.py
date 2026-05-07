@@ -1,6 +1,6 @@
 """
 ALAS — Import Dialog
-Diálogo de importación con opciones de CRS y decimado.
+Import dialog with CRS and decimation options.
 """
 
 from PyQt6.QtWidgets import (
@@ -13,27 +13,27 @@ from app.i18n import tr
 
 
 class ImportDialog(QDialog):
-    """Diálogo de opciones de importación."""
+    """Import options dialog."""
 
     def __init__(self, file_path: str, parent=None):
         super().__init__(parent)
         self.file_path = file_path
-        self.setWindowTitle("Opciones de importación")
+        self.setWindowTitle(tr("import.title"))
         self.setMinimumSize(400, 300)
         self._setup_ui()
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
 
-        info = QLabel(f"Archivo: {self.file_path}")
+        info = QLabel(f"{tr('import.file_label')} {self.file_path}")
         info.setWordWrap(True)
         layout.addWidget(info)
 
         # CRS override
-        grp_crs = QGroupBox("Sistema de coordenadas")
+        grp_crs = QGroupBox(tr("import.coordinate_system"))
         form_crs = QFormLayout(grp_crs)
 
-        self._override_crs = QCheckBox("Asignar CRS manualmente")
+        self._override_crs = QCheckBox(tr("import.assign_crs"))
         form_crs.addRow("", self._override_crs)
 
         self._epsg_override = QSpinBox()
@@ -41,14 +41,14 @@ class ImportDialog(QDialog):
         self._epsg_override.setValue(25830)
         self._epsg_override.setEnabled(False)
         self._override_crs.toggled.connect(self._epsg_override.setEnabled)
-        form_crs.addRow("EPSG", self._epsg_override)
+        form_crs.addRow(tr("import.epsg"), self._epsg_override)
         layout.addWidget(grp_crs)
 
         # Decimation
-        grp_dec = QGroupBox("Decimado en importación")
+        grp_dec = QGroupBox(tr("import.decimation"))
         form_dec = QFormLayout(grp_dec)
 
-        self._decimate = QCheckBox("Decimar al importar")
+        self._decimate = QCheckBox(tr("import.decimate"))
         form_dec.addRow("", self._decimate)
 
         self._voxel_size = QDoubleSpinBox()
@@ -57,7 +57,7 @@ class ImportDialog(QDialog):
         self._voxel_size.setSuffix(" m")
         self._voxel_size.setEnabled(False)
         self._decimate.toggled.connect(self._voxel_size.setEnabled)
-        form_dec.addRow("Tamaño voxel", self._voxel_size)
+        form_dec.addRow(tr("import.voxel_size"), self._voxel_size)
         layout.addWidget(grp_dec)
 
         layout.addStretch()

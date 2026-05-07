@@ -1,6 +1,6 @@
 """
 ALAS — Vegetation Analysis
-CHM, detección de árboles, segmentación de copas, estadísticas de dosel.
+CHM, tree detection, crown segmentation, canopy statistics.
 """
 
 import numpy as np
@@ -20,26 +20,26 @@ logger = get_logger("processing.vegetation")
 def detect_tree_tops(chm: RasterLayer, min_height: float = None,
                       window_size: int = None) -> np.ndarray:
     """
-    Detecta copas de árboles como máximos locales en el CHM.
-    Devuelve array (N, 3) con coordenadas [x, y, height].
+    Detects tree tops as local maxima in the CHM.
+    Returns array (N, 3) with coordinates [x, y, height].
     """
     min_height = min_height or DEFAULT_MIN_TREE_HEIGHT
     window_size = window_size or DEFAULT_CROWN_WINDOW
 
-    logger.info(f"Detectando árboles (min_h={min_height}m, ventana={window_size}px)")
+    logger.info(f"Detecting trees (min_h={min_height}m, window={window_size}px)")
 
     data = chm.get_band(0).copy()
     data[data == chm.nodata] = 0
 
-    # Máximos locales
+    # Local maxima
     local_max = ndimage.maximum_filter(data, size=window_size)
     is_peak = (data == local_max) & (data >= min_height)
 
-    # Coordenadas de los picos
+    # Peak coordinates
     rows, cols = np.where(is_peak)
     heights = data[rows, cols]
 
-    # Convertir pixel coords a geo coords
+    # Convert pixel coords to geo coords
     if chm.transform:
         xs = chm.transform.c + cols * chm.transform.a + chm.transform.a / 2
         ys = chm.transform.f + rows * chm.transform.e + chm.transform.e / 2
@@ -53,24 +53,24 @@ def detect_tree_tops(chm: RasterLayer, min_height: float = None,
 
     tree_tops = np.column_stack([xs, ys, heights])
 
-    logger.info(f"Detectados {len(tree_tops)} árboles (h: {heights.min():.1f} - {heights.max():.1f} m)")
+    logger.info(f"Detected {len(tree_tops)} trees (h: {heights.min():.1f} - {heights.max():.1f} m)")
     return tree_tops
 
 
 def segment_crowns(chm: RasterLayer, tree_tops: np.ndarray,
                     method: str = "watershed") -> np.ndarray:
     """
-    Segmenta copas individuales usando watershed.
-    Devuelve un raster de etiquetas (cada árbol = un ID).
+    Segments individual crowns using watershed.
+    Returns a label raster (each tree = one ID).
     """
-    logger.info(f"Segmentando copas ({method})...")
+    logger.info(f"Segmenting crowns ({method})...")
     from skimage.segmentation import watershed
     from skimage.feature import peak_local_max
 
     data = chm.get_band(0).copy()
     data[data == chm.nodata] = 0
 
-    # Crear marcadores desde tree_tops
+    # Create markers from tree_tops
     markers = np.zeros_like(data, dtype=np.int32)
 
     if chm.transform:
@@ -87,12 +87,12 @@ def segment_crowns(chm: RasterLayer, tree_tops: np.ndarray,
             if 0 <= row < data.shape[0] and 0 <= col < data.shape[1]:
                 markers[row, col] = i + 1
 
-    # Watershed (invertir CHM para que las copas sean cuencas)
-    mask = data > 0.5  # Solo zonas con vegetación
+    # Watershed (invert CHM so crowns become basins)
+    mask = data > 0.5  # Only vegetation zones
     labels = watershed(-data, markers=markers, mask=mask)
 
-    n_trees = len(np.unique(labels)) - 1  # Excluir 0 (background)
-    logger.info(f"Segmentadas {n_trees} copas individuales")
+    n_trees = len(np.unique(labels)) - 1  # Exclude 0 (background)
+    logger.info(f"Segmented {n_trees} individual crowns")
 
     return labels, data
 
@@ -101,10 +101,10 @@ def build_crown_raster(chm: RasterLayer,
                        height_map: np.ndarray,
                        labels: np.ndarray) -> RasterLayer:
     """
-    Construye un raster de copas segmentadas.
-    Cada píxel de copa toma la altura máxima de su segmento.
+    Builds a segmented crown raster.
+    Each crown pixel takes the maximum height of its segment.
     """
-    logger.info("Construyendo raster de copas segmentadas...")
+    logger.info("Building segmented crown raster...")
 
     crown_data = np.full(labels.shape, chm.nodata, dtype=np.float32)
     unique_ids = np.unique(labels)
@@ -118,14 +118,14 @@ def build_crown_raster(chm: RasterLayer,
 
     bounds = chm.bounds
     if bounds is None:
-        raise ValueError("No se puede construir raster de copas sin bounds válidos.")
+        raise ValueError("Cannot build crown raster without valid bounds.")
 
     result = RasterLayer.from_array(
         crown_data,
         bounds,
         epsg=chm.crs_epsg,
         nodata=chm.nodata,
-        name="Copas_vegetación"
+        name="Vegetation_crowns"
     )
     result.crs = chm.crs
     return result
@@ -134,10 +134,10 @@ def build_crown_raster(chm: RasterLayer,
 def compute_canopy_stats(chm: RasterLayer,
                           labels: np.ndarray) -> List[Dict]:
     """
-    Calcula estadísticas por copa segmentada.
-    Devuelve lista de dicts con: id, x, y, max_height, mean_height, area_m2.
+    Calculates statistics per segmented crown.
+    Returns list of dicts with: id, x, y, max_height, mean_height, area_m2.
     """
-    logger.info("Calculando estadísticas de copas...")
+    logger.info("Calculating crown statistics...")
 
     data = chm.get_band(0).copy()
     data[data == chm.nodata] = 0
@@ -147,7 +147,7 @@ def compute_canopy_stats(chm: RasterLayer,
     cell_area = res_x * res_y
 
     unique_ids = np.unique(labels)
-    unique_ids = unique_ids[unique_ids > 0]  # Excluir background
+    unique_ids = unique_ids[unique_ids > 0]  # Exclude background
 
     stats = []
     for tree_id in unique_ids:
@@ -157,7 +157,7 @@ def compute_canopy_stats(chm: RasterLayer,
         if len(heights) == 0:
             continue
 
-        # Centroide
+        # Centroid
         rows, cols = np.where(mask)
         mean_row = rows.mean()
         mean_col = cols.mean()
@@ -178,17 +178,17 @@ def compute_canopy_stats(chm: RasterLayer,
             "n_pixels": int(len(heights)),
         })
 
-    logger.info(f"Estadísticas calculadas para {len(stats)} árboles")
+    logger.info(f"Statistics calculated for {len(stats)} trees")
     return stats
 
 
 def density_map(chm: RasterLayer, cell_size: float = None) -> RasterLayer:
     """
-    Genera mapa de densidad de vegetación.
-    Porcentaje de cobertura del dosel por celda de tamaño configurable.
+    Generates vegetation density map.
+    Percentage of canopy coverage per cell of configurable size.
     """
     cell_size = cell_size or DEFAULT_CANOPY_CELL_SIZE
-    logger.info(f"Calculando mapa de densidad (celda={cell_size}m)")
+    logger.info(f"Calculating density map (cell={cell_size}m)")
 
     data = chm.get_band(0).copy()
     data[data == chm.nodata] = 0
@@ -221,9 +221,9 @@ def density_map(chm: RasterLayer, cell_size: float = None) -> RasterLayer:
 
     result = RasterLayer.from_array(
         density, bounds, epsg=chm.crs_epsg,
-        nodata=DEFAULT_NODATA, name="Densidad_vegetación"
+        nodata=DEFAULT_NODATA, name="Vegetation_density"
     )
     result.crs = chm.crs
 
-    logger.info(f"Densidad media: {np.mean(density):.1f}%")
+    logger.info(f"Mean density: {np.mean(density):.1f}%")
     return result

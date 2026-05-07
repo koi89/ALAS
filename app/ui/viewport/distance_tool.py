@@ -1,7 +1,7 @@
 """
 ALAS — Distance Tool
-Modal flotante para la herramienta de medición de distancia.
-Muestra los puntos A y B en tiempo real y resultados inline.
+Floating modal for the distance measurement tool.
+Shows points A and B in real time and inline results.
 """
 
 from PyQt6.QtWidgets import (
@@ -20,19 +20,19 @@ logger = get_logger("ui.distance_tool")
 
 class DistanceToolDialog(QDialog):
     """
-    Modal flotante de la herramienta de distancia.
-    - Se mantiene visible mientras el usuario hace clic en el viewport.
-    - Muestra los puntos A y B en tiempo real.
-    - Al seleccionar el punto B, muestra los resultados inline.
-    - Emite calculate_requested cuando se tienen dos puntos.
-    - Emite clear_requested cuando el usuario cancela/limpia.
+    Floating modal for the distance tool.
+    - Stays visible while the user clicks in the viewport.
+    - Shows points A and B in real time.
+    - When point B is selected, shows inline results.
+    - Emits calculate_requested when two points are available.
+    - Emits clear_requested when the user cancels/clears.
     """
 
-    calculate_requested = pyqtSignal()   # El main_window ejecuta el cálculo
-    clear_requested     = pyqtSignal()   # El main_window limpia el viewport
+    calculate_requested = pyqtSignal()   # The main_window executes the calculation
+    clear_requested     = pyqtSignal()   # The main_window clears the viewport
 
     def __init__(self, parent=None):
-        super().__init__(parent, Qt.WindowType.Tool)  # Tool = flotante, no bloquea
+        super().__init__(parent, Qt.WindowType.Tool)  # Tool = floating, non-blocking
         self.setWindowTitle(tr("action.distance"))
         self.setMinimumWidth(320)
         self.setMaximumWidth(400)
@@ -50,18 +50,15 @@ class DistanceToolDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.setSpacing(10)
 
-        # --- Instrucciones ---
-        lbl_hint = QLabel(
-            "Clic izquierdo para seleccionar el punto A, luego el punto B.\n"
-            "Los resultados se mostrarán automáticamente."
-        )
+        # --- Instructions ---
+        lbl_hint = QLabel(tr("dist.instructions"))
         lbl_hint.setWordWrap(True)
         lbl_hint.setObjectName("muted")
         lbl_hint.setTextFormat(Qt.TextFormat.RichText)
         layout.addWidget(lbl_hint)
 
-        # --- Lista de puntos ---
-        grp_points = QGroupBox("Puntos")
+        # --- Point list ---
+        grp_points = QGroupBox(tr("dist.points"))
         points_layout = QVBoxLayout(grp_points)
         points_layout.setContentsMargins(6, 6, 6, 6)
 
@@ -76,14 +73,14 @@ class DistanceToolDialog(QDialog):
 
         layout.addWidget(grp_points)
 
-        # --- Separador ---
+        # --- Separator ---
         sep = QFrame()
         sep.setFrameShape(QFrame.Shape.HLine)
         sep.setStyleSheet("color: #2a2a3d;")
         layout.addWidget(sep)
 
-        # --- Panel de resultados (oculto hasta calcular) ---
-        self._results_group = QGroupBox("Resultados")
+        # --- Results panel (hidden until calculation) ---
+        self._results_group = QGroupBox(tr("dist.results"))
         results_form = QFormLayout(self._results_group)
         results_form.setSpacing(6)
 
@@ -99,24 +96,24 @@ class DistanceToolDialog(QDialog):
         self._lbl_slope = QLabel("—")
         self._lbl_slope.setFont(font_val)
 
-        results_form.addRow("Distancia 3D:", self._lbl_dist_3d)
-        results_form.addRow("Distancia 2D:", self._lbl_dist_2d)
-        results_form.addRow("Diferencia Z:", self._lbl_dz)
-        results_form.addRow("Pendiente:", self._lbl_slope)
+        results_form.addRow(tr("dist.3d_distance"), self._lbl_dist_3d)
+        results_form.addRow(tr("dist.2d_distance"), self._lbl_dist_2d)
+        results_form.addRow(tr("dist.z_diff"), self._lbl_dz)
+        results_form.addRow(tr("dist.slope"), self._lbl_slope)
 
         self._results_group.setVisible(False)
         layout.addWidget(self._results_group)
 
-        # --- Botones de acción ---
+        # --- Action buttons ---
         btn_row = QHBoxLayout()
 
-        btn_clear = QPushButton("Limpiar")
+        btn_clear = QPushButton(tr("dist.clear"))
         btn_clear.clicked.connect(self._on_clear)
         btn_row.addWidget(btn_clear)
 
         layout.addLayout(btn_row)
 
-        # --- Botón cerrar ---
+        # --- Close button ---
         btn_close = QPushButton(tr("dialog.close"))
         btn_close.clicked.connect(self._on_close)
         layout.addWidget(btn_close)
@@ -125,13 +122,13 @@ class DistanceToolDialog(QDialog):
         self.adjustSize()
 
     # ------------------------------------------------------------------
-    # Public API — llamado desde main_window
+    # Public API — called from main_window
     # ------------------------------------------------------------------
 
     def add_point(self, x: float, y: float, z: float, label: str):
-        """Añade un punto (A o B) y actualiza la UI."""
+        """Add a point (A or B) and update the UI."""
         if len(self._points) >= 2:
-            return  # Solo dos puntos
+            return  # Only two points
         self._points.append((x, y, z))
 
         item = QListWidgetItem(f"{label}: X={x:.2f}   Y={y:.2f}   Z={z:.2f}")
@@ -141,31 +138,31 @@ class DistanceToolDialog(QDialog):
         if len(self._points) == 2:
             self.calculate_requested.emit()
 
-        logger.debug(f"Punto {label} añadido: ({x:.2f}, {y:.2f}, {z:.2f})")
+        logger.debug(f"Point {label} added: ({x:.2f}, {y:.2f}, {z:.2f})")
 
     def show_results(self, dist_3d: float, dist_2d: float, dz: float, slope_deg: float):
-        """Muestra los resultados en el panel inline."""
-        self._lbl_dist_3d.setText(f"{dist_3d:.3f} m")
-        self._lbl_dist_2d.setText(f"{dist_2d:.3f} m")
-        self._lbl_dz.setText(f"{dz:.3f} m")
-        self._lbl_slope.setText(f"{slope_deg:.1f} °")
+        """Show the results in the inline panel."""
+        self._lbl_dist_3d.setText(f"{dist_3d:.3f} {tr('dist.unit_m')}")
+        self._lbl_dist_2d.setText(f"{dist_2d:.3f} {tr('dist.unit_m')}")
+        self._lbl_dz.setText(f"{dz:.3f} {tr('dist.unit_m')}")
+        self._lbl_slope.setText(f"{slope_deg:.1f} {tr('dist.unit_deg')}")
 
         self._results_group.setVisible(True)
         self.adjustSize()
 
     def get_points(self) -> list[tuple]:
-        """Devuelve la lista de puntos [(x, y, z), ...]."""
+        """Return the point list [(x, y, z), ...]."""
         return list(self._points)
 
     def reset(self):
-        """Limpia puntos y resultados."""
+        """Clear points and results."""
         self._points.clear()
         self._point_list.clear()
         self._results_group.setVisible(False)
         self.adjustSize()
 
     # ------------------------------------------------------------------
-    # Slots internos
+    # Internal slots
     # ------------------------------------------------------------------
 
     def _on_clear(self):
@@ -177,13 +174,13 @@ class DistanceToolDialog(QDialog):
         self.reset()
         self.clear_requested.emit()
 
-    # Evitar que cerrar la ventana destruya el diálogo
+    # Prevent closing the window from destroying the dialog
     def closeEvent(self, event):
         self._on_close()
-        event.ignore()   # No destruir, solo ocultar
+        event.ignore()   # Do not destroy, only hide
         self.hide()
 
-    # Enter o Escape
+    # Enter or Escape
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Escape:
             self._on_close()

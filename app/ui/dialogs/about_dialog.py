@@ -28,7 +28,7 @@ class AboutDialog(QDialog):
         subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(subtitle)
 
-        version = QLabel(f"Versión {APP_VERSION}")
+        version = QLabel(f"Version {APP_VERSION}")
         version.setObjectName("muted")
         version.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(version)

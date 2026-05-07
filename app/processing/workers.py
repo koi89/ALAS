@@ -1,23 +1,23 @@
 """
 ALAS — Processing Workers
-Base classes para ejecutar tareas pesadas en hilos separados.
+Base classes to run heavy tasks in separate threads.
 """
 
 from PyQt6.QtCore import QObject, QRunnable, pyqtSignal, pyqtSlot
 
 
 class ProcessingWorkerSignals(QObject):
-    """Señales emitidas por los workers de procesamiento."""
+    """Signals emitted by processing workers."""
     started = pyqtSignal()
     progress = pyqtSignal(int)          # 0-100
-    status = pyqtSignal(str)            # mensaje de estado
-    result = pyqtSignal(object)         # resultado del procesamiento
-    error = pyqtSignal(str)             # mensaje de error
+    status = pyqtSignal(str)            # status message
+    result = pyqtSignal(object)         # processing result
+    error = pyqtSignal(str)             # error message
     finished = pyqtSignal()
 
 
 class ProcessingWorker(QRunnable):
-    """Worker base para tareas de procesamiento en background."""
+    """Base worker for background processing tasks."""
 
     def __init__(self, func, *args, **kwargs):
         super().__init__()
@@ -40,7 +40,7 @@ class ProcessingWorker(QRunnable):
 
 
 class FileLoadWorker(ProcessingWorker):
-    """Worker específico para carga de archivos."""
+    """Specific worker for file loading."""
 
     def __init__(self, file_path: str, loader_func, **kwargs):
         super().__init__(loader_func, file_path, **kwargs)
@@ -48,7 +48,7 @@ class FileLoadWorker(ProcessingWorker):
 
 
 class ProgressCallback:
-    """Callback para reportar progreso desde funciones de procesamiento."""
+    """Callback to report progress from processing functions."""
 
     def __init__(self, signals: ProcessingWorkerSignals = None):
         self.signals = signals

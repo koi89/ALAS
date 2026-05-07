@@ -1,6 +1,6 @@
 """
 ALAS — Hydrology
-Análisis hidrológico: cuencas, flujo, red de drenaje, encharcamiento.
+Hydrological analysis: basins, flow, drainage network, ponding.
 """
 
 import numpy as np
@@ -8,7 +8,7 @@ import tempfile
 import os
 from typing import Optional, Tuple
 
-# Compatibility patch for NumPy 2.x+: np.in1d fue eliminado, usar np.isin.
+# Compatibility patch for NumPy 2.x+: np.in1d was removed, use np.isin.
 if not hasattr(np, "in1d"):
     def _in1d(ar1, ar2, assume_unique=False, invert=False):
         return np.isin(ar1, ar2, invert=invert)
@@ -22,18 +22,18 @@ logger = get_logger("processing.hydrology")
 
 
 # ------------------------------------------------------------------
-# Funciones públicas
+# Public functions
 # ------------------------------------------------------------------
 
 def condition_dem(dtm: RasterLayer) -> RasterLayer:
     """
-    Acondiciona el MDT para análisis hidrológico:
-    relleno de pozos, depresiones y resolución de zonas planas.
+    Conditions the DTM for hydrological analysis:
+    filling pits, depressions, and resolving flat areas.
 
     Returns:
-        RasterLayer con el MDT condicionado.
+        RasterLayer with conditioned DTM.
     """
-    logger.info("Acondicionando MDT para hidrología...")
+    logger.info("Conditioning DTM for hydrology...")
 
     grid, path = _get_grid_and_path(dtm)
     dem = grid.read_raster(path)
@@ -43,25 +43,25 @@ def condition_dem(dtm: RasterLayer) -> RasterLayer:
     result_arr = np.array(inflated, dtype=np.float32)
     result_arr[np.isnan(result_arr)] = DEFAULT_NODATA
 
-    result = _build_result(result_arr, dtm, name="MDT_condicionado")
-    logger.info("MDT acondicionado correctamente.")
+    result = _build_result(result_arr, dtm, name="DTM_conditioned")
+    logger.info("DTM conditioned successfully.")
     return result
 
 
 def flow_direction(dtm: RasterLayer,
                    conditioned: Optional[RasterLayer] = None) -> RasterLayer:
     """
-    Calcula la dirección de flujo (D8).
+    Calculates flow direction (D8).
 
     Args:
-        dtm: MDT original o ya condicionado.
-        conditioned: Si se pasa un MDT ya condicionado, se usa directamente
-                     para evitar re-procesar.
+        dtm: Original or already conditioned DTM.
+        conditioned: If an already conditioned DTM is passed, it is used directly
+                     to avoid reprocessing.
 
     Returns:
-        RasterLayer con la dirección de flujo.
+        RasterLayer with flow direction.
     """
-    logger.info("Calculando dirección de flujo (D8)...")
+    logger.info("Calculating flow direction (D8)...")
 
     grid, dem = _prepare_dem(dtm, conditioned)
     fdir = grid.flowdir(dem)
@@ -69,23 +69,23 @@ def flow_direction(dtm: RasterLayer,
     fdir_arr = np.array(fdir, dtype=np.float32)
     fdir_arr[np.isnan(fdir_arr)] = DEFAULT_NODATA
 
-    logger.info("Dirección de flujo calculada.")
-    return _build_result(fdir_arr, dtm, name="Dirección_flujo")
+    logger.info("Flow direction calculated.")
+    return _build_result(fdir_arr, dtm, name="Flow_direction")
 
 
 def flow_accumulation(dtm: RasterLayer,
                       conditioned: Optional[RasterLayer] = None) -> RasterLayer:
     """
-    Calcula la acumulación de flujo.
+    Calculates flow accumulation.
 
     Args:
-        dtm: MDT original.
-        conditioned: MDT ya condicionado (opcional, evita re-procesar).
+        dtm: Original DTM.
+        conditioned: Already conditioned DTM (optional, avoids reprocessing).
 
     Returns:
-        RasterLayer con la acumulación de flujo.
+        RasterLayer with flow accumulation.
     """
-    logger.info("Calculando acumulación de flujo...")
+    logger.info("Calculating flow accumulation...")
 
     grid, dem = _prepare_dem(dtm, conditioned)
     fdir = grid.flowdir(dem)
@@ -94,8 +94,8 @@ def flow_accumulation(dtm: RasterLayer,
     acc_arr = np.array(acc, dtype=np.float32)
     acc_arr[np.isnan(acc_arr)] = DEFAULT_NODATA
 
-    logger.info(f"Acumulación máxima: {np.nanmax(acc_arr):.0f} celdas")
-    return _build_result(acc_arr, dtm, name="Acumulación_flujo")
+    logger.info(f"Maximum accumulation: {np.nanmax(acc_arr):.0f} cells")
+    return _build_result(acc_arr, dtm, name="Flow_accumulation")
 
 
 def delineate_watershed(dtm: RasterLayer,
@@ -103,31 +103,31 @@ def delineate_watershed(dtm: RasterLayer,
                          snap_threshold: int = 100,
                          conditioned: Optional[RasterLayer] = None) -> RasterLayer:
     """
-    Delimita una cuenca vertiente desde un punto de vertido.
+    Delineates a watershed from a pour point.
 
     Args:
-        dtm: MDT original.
-        pour_point: (x, y) en coordenadas del raster (sistema de referencia del MDT).
-        snap_threshold: Umbral mínimo de acumulación al que ajustar el punto de vertido.
-        conditioned: MDT ya condicionado (opcional).
+        dtm: Original DTM.
+        pour_point: (x, y) in raster coordinates (DTM reference system).
+        snap_threshold: Minimum accumulation threshold to snap the pour point.
+        conditioned: Already conditioned DTM (optional).
 
     Returns:
-        RasterLayer con la máscara de la cuenca (1 = cuenca, 0/nodata = fuera).
+        RasterLayer with watershed mask (1 = basin, 0/nodata = outside).
     """
     logger.info(
-        f"Delimitando cuenca desde ({pour_point[0]:.1f}, {pour_point[1]:.1f})"
+        f"Delineating watershed from ({pour_point[0]:.1f}, {pour_point[1]:.1f})"
     )
 
     grid, dem = _prepare_dem(dtm, conditioned)
     fdir = grid.flowdir(dem)
     acc = grid.accumulation(fdir)
 
-    # snap_to_mask espera un array de forma (N, 2) con pares (x, y)
+    # snap_to_mask expects an array of shape (N, 2) with (x, y) pairs
     xy = np.array([[pour_point[0], pour_point[1]]])
     snapped = grid.snap_to_mask(acc > snap_threshold, xy)
     x_snap, y_snap = float(snapped[0, 0]), float(snapped[0, 1])
 
-    logger.info(f"Punto ajustado a alta acumulación: ({x_snap:.1f}, {y_snap:.1f})")
+    logger.info(f"Point snapped to high accumulation: ({x_snap:.1f}, {y_snap:.1f})")
 
     catch = grid.catchment(x=x_snap, y=y_snap, fdir=fdir, xytype="coordinate")
     catch_arr = np.array(catch, dtype=np.float32)
@@ -136,27 +136,27 @@ def delineate_watershed(dtm: RasterLayer,
     area_cells = int(np.sum(catch_arr == 1))
     if dtm.resolution and area_cells > 0:
         area_m2 = area_cells * dtm.resolution[0] * dtm.resolution[1]
-        logger.info(f"Cuenca: {area_cells} celdas ({area_m2 / 10_000:.2f} ha)")
+        logger.info(f"Basin: {area_cells} cells ({area_m2 / 10_000:.2f} ha)")
 
-    return _build_result(catch_arr, dtm, name="Cuenca")
+    return _build_result(catch_arr, dtm, name="Watershed")
 
 
 def extract_drainage_network(dtm: RasterLayer,
                               threshold: Optional[int] = None,
                               conditioned: Optional[RasterLayer] = None) -> dict:
     """
-    Extrae la red de drenaje como geometrías vectoriales (GeoJSON-like).
+    Extracts drainage network as vector geometries (GeoJSON-like).
 
     Args:
-        dtm: MDT original.
-        threshold: Umbral de acumulación para definir cauces.
-        conditioned: MDT ya condicionado (opcional).
+        dtm: Original DTM.
+        threshold: Accumulation threshold to define channels.
+        conditioned: Already conditioned DTM (optional).
 
     Returns:
-        Diccionario con FeatureCollection de segmentos de la red.
+        Dictionary with FeatureCollection of network segments.
     """
     threshold = threshold or DEFAULT_FLOW_ACC_THRESHOLD
-    logger.info(f"Extrayendo red de drenaje (umbral={threshold})...")
+    logger.info(f"Extracting drainage network (threshold={threshold})...")
 
     grid, dem = _prepare_dem(dtm, conditioned)
     fdir = grid.flowdir(dem)
@@ -165,7 +165,7 @@ def extract_drainage_network(dtm: RasterLayer,
     branches = grid.extract_river_network(fdir, acc > threshold)
 
     n_features = len(branches.get("features", []))
-    logger.info(f"Red de drenaje: {n_features} segmentos extraídos.")
+    logger.info(f"Drainage network: {n_features} segments extracted.")
     return branches
 
 
@@ -217,85 +217,127 @@ def simulate_rainfall(dtm: RasterLayer,
     return result
 
 
+def simulate_flood(dtm: RasterLayer, water_height: float) -> RasterLayer:
+    """
+    Simulates a flood scenario by flooding all terrain cells whose elevation
+    is below a given absolute water level.
+
+    Args:
+        dtm: Original DTM raster layer.
+        water_height: Absolute water surface elevation in the same units as the DTM.
+
+    Returns:
+        RasterLayer where each cell value is the flood depth (water_height - elevation)
+        for inundated cells, and 0 for cells above the water level.
+    """
+    logger.info(f"Simulating flood at water level {water_height} m...")
+
+    arr = np.asarray(dtm.data, dtype=np.float32)
+    if arr.ndim > 2:
+        arr = arr[0]
+
+    nodata_mask = np.isnan(arr) | (arr == DEFAULT_NODATA)
+
+    depth = np.zeros_like(arr, dtype=np.float32)
+    flooded = (~nodata_mask) & (arr < water_height)
+    depth[flooded] = water_height - arr[flooded]
+    depth[nodata_mask] = DEFAULT_NODATA
+
+    flooded_cells = int(np.sum(flooded))
+    if dtm.resolution and flooded_cells > 0:
+        area_m2 = flooded_cells * dtm.resolution[0] * dtm.resolution[1]
+        logger.info(
+            f"Flood simulation complete. Inundated: {flooded_cells} cells "
+            f"({area_m2 / 10_000:.2f} ha), max depth: {float(np.max(depth[flooded])):.2f} m"
+        )
+    else:
+        logger.info("Flood simulation complete. No cells inundated at this water level.")
+
+    result = _build_result(depth, dtm, name=f"Flood_{water_height:.1f}m")
+    result.flood_water_height = water_height
+    result.flood_terrain_arr = arr
+    return result
+
+
 def detect_ponding_zones(dtm: RasterLayer,
                           threshold: float = 0.1) -> RasterLayer:
     """
-    Detecta zonas con potencial de encharcamiento.
+    Detects zones with potential ponding.
 
-    La diferencia entre el MDT rellenado y el original indica la profundidad
-    de las depresiones. Se utiliza el MDT *sin* resolve_flats para conservar
-    la magnitud real del relleno.
+    The difference between the filled DTM and the original indicates the depth
+    of depressions. Uses the DTM *without* resolve_flats to preserve the
+    actual fill magnitude.
 
     Args:
-        dtm: MDT original (sin acondicionar).
-        threshold: Profundidad mínima (metros) para considerar encharcamiento.
+        dtm: Original DTM (unconditioned).
+        threshold: Minimum depth (meters) to consider ponding.
 
     Returns:
-        RasterLayer con la profundidad de encharcamiento potencial.
+        RasterLayer with potential ponding depth.
     """
-    logger.info("Detectando zonas de encharcamiento...")
+    logger.info("Detecting ponding zones...")
 
     grid, path = _get_grid_and_path(dtm)
     dem = grid.read_raster(path)
 
-    # MDT original como array
+    # Original DTM as array
     original = np.array(dem, dtype=np.float32)
 
-    # Solo fill_pits + fill_depressions — NO resolve_flats, para preservar
-    # la magnitud real de las depresiones rellenadas.
+    # Only fill_pits + fill_depressions — NO resolve_flats, to preserve
+    # the actual magnitude of filled depressions.
     pit_filled = grid.fill_pits(dem)
     filled = np.array(grid.fill_depressions(pit_filled), dtype=np.float32)
 
-    # Profundidad de encharcamiento
+    # Ponding depth
     depth = filled - original
 
-    # Aplicar nodata y umbral de forma consistente (>= threshold en ambos lados)
+    # Apply nodata and threshold consistently (>= threshold on both sides)
     nodata_mask = np.isnan(original) | (original == DEFAULT_NODATA)
     depth[nodata_mask] = DEFAULT_NODATA
     depth[~nodata_mask & (depth < threshold)] = 0.0
 
-    result = _build_result(depth, dtm, name="Encharcamiento")
+    result = _build_result(depth, dtm, name="Ponding")
 
     ponding_cells = int(np.sum(depth[~nodata_mask] >= threshold))
     if dtm.resolution and ponding_cells > 0:
         area_m2 = ponding_cells * dtm.resolution[0] * dtm.resolution[1]
-        logger.info(f"Zonas de encharcamiento: {ponding_cells} celdas ({area_m2:.0f} m²)")
+        logger.info(f"Ponding zones: {ponding_cells} cells ({area_m2:.0f} m²)")
     else:
-        logger.info("No se detectaron zonas de encharcamiento significativas.")
+        logger.info("No significant ponding zones detected.")
 
     return result
 
 
 # ------------------------------------------------------------------
-# Helpers privados
+# Private helpers
 # ------------------------------------------------------------------
 
 def _get_grid_and_path(dtm: RasterLayer):
     """
-    Obtiene el Grid de pysheds y la ruta al raster.
+    Gets the pysheds Grid and raster path.
 
-    pysheds trabaja internamente con archivos GeoTIFF.
-    Si el RasterLayer no tiene ruta en disco, se escribe uno temporal.
+    pysheds works internally with GeoTIFF files.
+    If the RasterLayer has no disk path, a temporary one is written.
     """
     from pysheds.grid import Grid
 
     if dtm.file_path and os.path.isfile(dtm.file_path):
         return Grid.from_raster(dtm.file_path), dtm.file_path
 
-    # Escribir a archivo temporal
+    # Write to temporary file
     tmp = tempfile.NamedTemporaryFile(suffix=".tif", delete=False)
     tmp.close()
     dtm.to_geotiff(tmp.name)
-    logger.debug(f"MDT exportado a temporal: {tmp.name}")
+    logger.debug(f"DTM exported to temp: {tmp.name}")
     return Grid.from_raster(tmp.name), tmp.name
 
 
 def _condition_raw(grid, dem):
     """
-    Aplica el pipeline completo de acondicionamiento sobre un objeto dem de pysheds.
+    Applies the complete conditioning pipeline on a pysheds dem object.
 
     Returns:
-        dem acondicionado (pit_filled → flooded → inflated).
+        conditioned dem (pit_filled → flooded → inflated).
     """
     pit_filled = grid.fill_pits(dem)
     flooded = grid.fill_depressions(pit_filled)
@@ -305,13 +347,13 @@ def _condition_raw(grid, dem):
 
 def _prepare_dem(dtm: RasterLayer, conditioned: Optional[RasterLayer] = None):
     """
-    Prepara el MDT para análisis hidrológico.
+    Prepares the DTM for hydrological analysis.
 
-    Si se pasa un `conditioned` ya procesado, se usa directamente evitando
-    recalcular el acondicionamiento. De lo contrario, se acondiciona el `dtm`.
+    If an already processed `conditioned` is passed, it is used directly
+    avoiding recalculating conditioning. Otherwise, `dtm` is conditioned.
 
     Returns:
-        (grid, dem_condicionado) listos para calcular flowdir/accumulation.
+        (grid, conditioned_dem) ready for flowdir/accumulation calculation.
     """
     from pysheds.grid import Grid
 
@@ -327,7 +369,7 @@ def _prepare_dem(dtm: RasterLayer, conditioned: Optional[RasterLayer] = None):
 
 def _build_result(arr: np.ndarray, dtm: RasterLayer, name: str) -> RasterLayer:
     """
-    Construye un RasterLayer de resultado copiando la georreferenciación del MDT origen.
+    Builds a result RasterLayer copying the georeferencing from the source DTM.
     """
     result = RasterLayer.from_array(
         arr, dtm.bounds, epsg=dtm.crs_epsg,

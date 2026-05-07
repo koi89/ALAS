@@ -1,6 +1,6 @@
 """
 ALAS — DEM Dialog
-Diálogo para configurar y generar modelos digitales (MDT/MDS/CHM).
+Dialog to configure and generate digital models (DTM/DSM/CHM).
 """
 
 from PyQt6.QtWidgets import (
@@ -21,7 +21,7 @@ logger = get_logger("ui.dem_dialog")
 
 
 class DEMDialog(QDialog):
-    """Diálogo de generación de modelos digitales."""
+    """Digital model generation dialog."""
 
     def __init__(self, point_cloud: PointCloudData, parent=None):
         super().__init__(parent)
@@ -34,24 +34,24 @@ class DEMDialog(QDialog):
     def _setup_ui(self):
         layout = QVBoxLayout(self)
 
-        info = QLabel(f"Nube: {self.pc.name} ({self.pc.point_count:,} puntos)")
+        info = QLabel(f"{tr('dem.cloud')} {self.pc.name} ({self.pc.point_count:,} points)")
         info.setObjectName("subheading")
         layout.addWidget(info)
 
         # DEM type
-        grp_type = QGroupBox("Tipo de modelo")
+        grp_type = QGroupBox(tr("dem.model_type"))
         form_type = QFormLayout(grp_type)
 
         self._type_combo = QComboBox()
         self._type_combo.addItem(tr("dem.dtm"), "dtm")
         self._type_combo.addItem(tr("dem.dsm"), "dsm")
         self._type_combo.addItem(tr("dem.chm"), "chm")
-        self._type_combo.addItem("MDT, MDS, CHM", "all")
-        form_type.addRow("Modelo", self._type_combo)
+        self._type_combo.addItem(tr("dem.all"), "all")
+        form_type.addRow(tr("dem.model"), self._type_combo)
         layout.addWidget(grp_type)
 
         # Parameters
-        grp_params = QGroupBox("Parámetros")
+        grp_params = QGroupBox(tr("dem.resolution"))
         form_params = QFormLayout(grp_params)
 
         self._resolution = QDoubleSpinBox()
@@ -59,24 +59,24 @@ class DEMDialog(QDialog):
         self._resolution.setValue(DEFAULT_DEM_RESOLUTION)
         self._resolution.setDecimals(1)
         self._resolution.setSuffix(" m")
-        form_params.addRow("Resolución", self._resolution)
+        form_params.addRow(tr("dem.resolution"), self._resolution)
 
         self._method_combo = QComboBox()
-        self._method_combo.addItem("IDW (Inverse Distance Weighting)", "idw")
-        self._method_combo.addItem("TIN (Triangulación Delaunay)", "tin")
-        self._method_combo.addItem("Vecino más cercano", "nearest")
-        form_params.addRow("Interpolación", self._method_combo)
+        self._method_combo.addItem(tr("dem.method_idw"), "idw")
+        self._method_combo.addItem(tr("dem.method_tin"), "tin")
+        self._method_combo.addItem(tr("dem.method_nearest"), "nearest")
+        form_params.addRow(tr("dem.interpolation"), self._method_combo)
 
         self._power = QDoubleSpinBox()
         self._power.setRange(0.5, 5.0)
         self._power.setValue(DEFAULT_IDW_POWER)
         self._power.setDecimals(1)
-        form_params.addRow("Potencia IDW", self._power)
+        form_params.addRow(tr("dem.idw_power"), self._power)
 
         layout.addWidget(grp_params)
 
         # Auto-export
-        self._auto_export = QCheckBox("Exportar automáticamente como GeoTIFF")
+        self._auto_export = QCheckBox(tr("dem.auto_export"))
         self._auto_export.setChecked(False)
         layout.addWidget(self._auto_export)
 
@@ -90,7 +90,7 @@ class DEMDialog(QDialog):
         btn_cancel.clicked.connect(self.reject)
         btn_layout.addWidget(btn_cancel)
 
-        btn_generate = QPushButton("Generar")
+        btn_generate = QPushButton(tr("dem.generate"))
         btn_generate.setObjectName("primary")
         btn_generate.clicked.connect(self._generate)
         btn_layout.addWidget(btn_generate)
@@ -123,14 +123,14 @@ class DEMDialog(QDialog):
             if self._auto_export.isChecked() and self._results:
                 if len(self._results) == 1:
                     path, _ = QFileDialog.getSaveFileName(
-                        self, "Guardar GeoTIFF", f"{self._results[0].name}.tif",
-                        "GeoTIFF (*.tif)"
+                        self, tr("dem.save_geotiff"), f"{self._results[0].name}.tif",
+                        tr("dem.geotiff_filter")
                     )
                     if path:
                         self._results[0].to_geotiff(path)
                 else:
                     dir_path = QFileDialog.getExistingDirectory(
-                        self, "Seleccionar carpeta para guardar GeoTIFFs"
+                        self, tr("dem.select_folder")
                     )
                     if dir_path:
                         import os

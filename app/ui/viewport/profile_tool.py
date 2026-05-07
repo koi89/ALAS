@@ -1,6 +1,6 @@
 """
 ALAS — Profile Tool
-Herramienta interactiva de perfil topográfico con gráfico matplotlib.
+Interactive topographic profile tool with matplotlib chart.
 """
 
 import numpy as np
@@ -22,7 +22,7 @@ logger = get_logger("ui.profile_tool")
 
 
 class ProfileDialog(QDialog):
-    """Diálogo de perfil topográfico con gráfico embebido."""
+    """Topographic profile dialog with embedded chart."""
 
     def __init__(self, layer_manager, parent=None):
         super().__init__(parent)
@@ -35,28 +35,28 @@ class ProfileDialog(QDialog):
         layout = QVBoxLayout(self)
 
         # Coordinate inputs
-        grp_coords = QGroupBox("Coordenadas del perfil")
+        grp_coords = QGroupBox(tr("prof.coords"))
         form = QFormLayout(grp_coords)
 
         self._x1 = QDoubleSpinBox()
         self._x1.setRange(-1e8, 1e8)
         self._x1.setDecimals(2)
-        form.addRow("X inicio", self._x1)
+        form.addRow(tr("prof.x_start"), self._x1)
 
         self._y1 = QDoubleSpinBox()
         self._y1.setRange(-1e8, 1e8)
         self._y1.setDecimals(2)
-        form.addRow("Y inicio", self._y1)
+        form.addRow(tr("prof.y_start"), self._y1)
 
         self._x2 = QDoubleSpinBox()
         self._x2.setRange(-1e8, 1e8)
         self._x2.setDecimals(2)
-        form.addRow("X fin", self._x2)
+        form.addRow(tr("prof.x_end"), self._x2)
 
         self._y2 = QDoubleSpinBox()
         self._y2.setRange(-1e8, 1e8)
         self._y2.setDecimals(2)
-        form.addRow("Y fin", self._y2)
+        form.addRow(tr("prof.y_end"), self._y2)
 
         layout.addWidget(grp_coords)
 
@@ -76,7 +76,7 @@ class ProfileDialog(QDialog):
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
 
-        btn_calc = QPushButton("Calcular")
+        btn_calc = QPushButton(tr("prof.calculate"))
         btn_calc.clicked.connect(self._on_calculate)
         btn_layout.addWidget(btn_calc)
 
@@ -89,7 +89,7 @@ class ProfileDialog(QDialog):
     def _on_calculate(self):
         entry = self.layer_manager.active_layer
         if not entry:
-            self._info.setText("Error: Selecciona una capa activa primero.")
+            self._info.setText(tr("prof.error_select"))
             return
 
         x1 = self._x1.value()
@@ -105,30 +105,30 @@ class ProfileDialog(QDialog):
             else:
                 return
 
-            self.plot_profile(dist, elev, title=f"Perfil - {entry.name}")
+            self.plot_profile(dist, elev, title=tr("prof.title").format(entry.name))
         except Exception as e:
-            logger.error(f"Error calculando perfil: {e}")
+            logger.error(f"Error calculating profile: {e}")
             self._info.setText(f"Error: {e}")
 
     def _style_axes(self):
-        """Aplica estilo oscuro al gráfico."""
+        """Applies dark style to the chart."""
         self._ax.set_facecolor('#12121f')
         self._ax.tick_params(colors='#a0a0b0', labelsize=9)
         self._ax.spines['bottom'].set_color('#3a3a4d')
         self._ax.spines['left'].set_color('#3a3a4d')
         self._ax.spines['top'].set_visible(False)
         self._ax.spines['right'].set_visible(False)
-        self._ax.set_xlabel("Distancia (m)", color='#c0c0d0', fontsize=10)
-        self._ax.set_ylabel("Elevación (m)", color='#c0c0d0', fontsize=10)
+        self._ax.set_xlabel(tr("prof.distance"), color='#c0c0d0', fontsize=10)
+        self._ax.set_ylabel(tr("prof.elevation"), color='#c0c0d0', fontsize=10)
         self._ax.grid(True, alpha=0.2, color='#3a3a4d')
 
     def plot_profile(self, distances: np.ndarray, elevations: np.ndarray,
-                      title: str = "Perfil topográfico"):
-        """Dibuja el perfil en el canvas."""
+                      title: str = "Topographic profile"):
+        """Draws the profile on the canvas."""
         self._ax.clear()
         self._style_axes()
 
-        # Línea del perfil
+        # Profile line
         valid = ~np.isnan(elevations)
         self._ax.fill_between(
             distances[valid], elevations[valid],
@@ -147,14 +147,13 @@ class ProfileDialog(QDialog):
         valid_elev = elevations[valid]
         if len(valid_elev) > 0:
             self._info.setText(
-                f"Distancia: {distances[-1]:.1f}m | "
-                f"Z min: {valid_elev.min():.2f}m | "
-                f"Z max: {valid_elev.max():.2f}m | "
-                f"Desnivel: {valid_elev.max() - valid_elev.min():.2f}m"
+                tr("prof.info").format(
+                    distances[-1], valid_elev.min(), valid_elev.max(), valid_elev.max() - valid_elev.min()
+                )
             )
 
     def set_coordinates(self, x1, y1, x2, y2):
-        """Establece las coordenadas desde selección en viewport."""
+        """Sets coordinates from viewport selection."""
         self._x1.setValue(x1)
         self._y1.setValue(y1)
         self._x2.setValue(x2)

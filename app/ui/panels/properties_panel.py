@@ -1,6 +1,6 @@
 """
 ALAS — Properties Panel
-Panel de propiedades de la capa activa (metadatos, estadísticas).
+Active layer properties panel (metadata, statistics).
 """
 
 from PyQt6.QtWidgets import (
@@ -20,7 +20,7 @@ logger = get_logger("ui.properties_panel")
 
 
 class PropertiesPanel(QWidget):
-    """Panel que muestra metadatos y estadísticas de la capa activa."""
+    """Panel that shows metadata and statistics of the active layer."""
 
     def __init__(self, layer_manager: LayerManager, parent=None):
         super().__init__(parent)
@@ -44,7 +44,7 @@ class PropertiesPanel(QWidget):
         main_layout.addWidget(scroll)
 
         # Placeholder
-        self._placeholder = QLabel("Selecciona una capa para ver sus propiedades")
+        self._placeholder = QLabel(tr("prop.select_layer"))
         self._placeholder.setObjectName("muted")
         self._placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._placeholder.setWordWrap(True)
@@ -69,7 +69,7 @@ class PropertiesPanel(QWidget):
                 widget.deleteLater()
 
     def _show_placeholder(self):
-        lbl = QLabel("Selecciona una capa para ver sus propiedades")
+        lbl = QLabel(tr("prop.select_layer"))
         lbl.setObjectName("muted")
         lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lbl.setWordWrap(True)
@@ -90,111 +90,111 @@ class PropertiesPanel(QWidget):
 
     def _show_point_cloud_props(self, entry: LayerEntry):
         pc = entry.layer
-        # --- Cabecera ---
-        header_lbl = QLabel(f"<h2>{entry.name}</h2><p style='color: #888;'>Nube de puntos</p>")
+        # --- Header ---
+        header_lbl = QLabel(f"<h2>{entry.name}</h2><p style='color: #888;'>{tr('prop.point_cloud')}</p>")
         header_lbl.setTextFormat(Qt.TextFormat.RichText)
         self._content_layout.addWidget(header_lbl)
 
-        # --- Info general ---
-        grp_info = QGroupBox("Información general")
+        # --- General info ---
+        grp_info = QGroupBox(tr("prop.general_info"))
         form = QFormLayout(grp_info)
         form.addRow("<b>" + tr("prop.filename") + "</b>", QLabel(pc.file_path or "—"))
-        form.addRow("<b>Tamaño archivo</b>", QLabel(self._get_file_size_str(pc.file_path)))
+        form.addRow("<b>" + tr("prop.file_size") + "</b>", QLabel(self._get_file_size_str(pc.file_path)))
         form.addRow("<b>" + tr("prop.point_count") + "</b>", QLabel(f"{pc.point_count:,}"))
-        form.addRow("<b>Formato LAS</b>", QLabel(f"v{pc.file_version or '?'} (formato {pc.point_format or '?'})"))
+        form.addRow("<b>" + tr("prop.las_format") + "</b>", QLabel(f"v{pc.file_version or '?'} (format {pc.point_format or '?'})"))
         
-        lbl_sensor = QLabel(pc.system_identifier or "No especificado")
-        lbl_sensor.setToolTip("Identificador del sensor/sistema LiDAR")
-        form.addRow("<b>Sensor</b>", lbl_sensor)
+        lbl_sensor = QLabel(pc.system_identifier or "Not specified")
+        lbl_sensor.setToolTip("LiDAR sensor/system identifier")
+        form.addRow("<b>" + tr("prop.sensor") + "</b>", lbl_sensor)
         
-        lbl_crs = QLabel(f"EPSG:{pc.crs_epsg}" if pc.crs_epsg else tr("status.no_crs"))
-        lbl_crs.setToolTip("Sistema de Referencia de Coordenadas")
+        lbl_crs = QLabel(f"{tr('crs.epsg_prefix')}{pc.crs_epsg}" if pc.crs_epsg else tr("status.no_crs"))
+        lbl_crs.setToolTip(tr("prop.crs_tooltip"))
         form.addRow("<b>" + tr("prop.crs") + "</b>", lbl_crs)
         self._content_layout.addWidget(grp_info)
 
-        # --- Extensión ---
+        # --- Extent ---
         bounds = pc.bounds
         if bounds:
             grp_bounds = QGroupBox(tr("prop.bounds"))
             form_b = QFormLayout(grp_bounds)
             w = bounds[3] - bounds[0]
             h = bounds[4] - bounds[1]
-            form_b.addRow("<b>X</b>", QLabel(f"{bounds[0]:.2f} m — {bounds[3]:.2f} m (Ancho: {w:.2f} m)"))
-            form_b.addRow("<b>Y</b>", QLabel(f"{bounds[1]:.2f} m — {bounds[4]:.2f} m (Alto: {h:.2f} m)"))
-            form_b.addRow("<b>Z</b>", QLabel(f"{bounds[2]:.2f} m — {bounds[5]:.2f} m"))
+            form_b.addRow("<b>" + tr("prop.x") + "</b>", QLabel(f"{bounds[0]:.2f} m — {bounds[3]:.2f} m (Width: {w:.2f} m)"))
+            form_b.addRow("<b>" + tr("prop.y") + "</b>", QLabel(f"{bounds[1]:.2f} m — {bounds[4]:.2f} m (Height: {h:.2f} m)"))
+            form_b.addRow("<b>" + tr("prop.z") + "</b>", QLabel(f"{bounds[2]:.2f} m — {bounds[5]:.2f} m"))
             self._content_layout.addWidget(grp_bounds)
 
-        # --- Estadísticas de altura ---
+        # --- Height statistics ---
         stats = pc.height_stats()
         if stats:
-            grp_z = QGroupBox("Estadísticas Z")
+            grp_z = QGroupBox(tr("prop.z_stats"))
             form_z = QFormLayout(grp_z)
             form_z.addRow("<b>" + tr("prop.min") + "</b>", QLabel(f"{stats['min']:.2f} m"))
             form_z.addRow("<b>" + tr("prop.max") + "</b>", QLabel(f"{stats['max']:.2f} m"))
             form_z.addRow("<b>" + tr("prop.mean") + "</b>", QLabel(f"{stats['mean']:.2f} m"))
-            form_z.addRow("<b>Desv. estándar</b>", QLabel(f"{stats['std']:.2f} m"))
+            form_z.addRow("<b>" + tr("prop.std_dev") + "</b>", QLabel(f"{stats['std']:.2f} m"))
             self._content_layout.addWidget(grp_z)
 
-        # --- Clasificación ---
+        # --- Classification ---
         cls_summary = pc.classification_summary()
         if cls_summary:
-            grp_cls = QGroupBox("Clasificación")
+            grp_cls = QGroupBox(tr("prop.classification"))
             form_c = QFormLayout(grp_cls)
             total = sum(cls_summary.values())
             for code, count in sorted(cls_summary.items()):
-                name = ASPRS_CLASSIFICATION.get(code, f"Clase {code}")
+                name = ASPRS_CLASSIFICATION.get(code, f"Class {code}")
                 pct = (count / total * 100) if total > 0 else 0
                 form_c.addRow(f"<b>{name}</b>", QLabel(f"{count:,} ({pct:.1f}%)"))
             self._content_layout.addWidget(grp_cls)
 
-        # --- Dimensiones disponibles ---
-        grp_dims = QGroupBox("Dimensiones disponibles")
+        # --- Available dimensions ---
+        grp_dims = QGroupBox(tr("prop.available_dims"))
         form_d = QFormLayout(grp_dims)
         dims = pc.available_dimensions
         lbl_dims = QLabel(", ".join(dims))
         lbl_dims.setWordWrap(True)
-        form_d.addRow("<b>Campos</b>", lbl_dims)
+        form_d.addRow("<b>" + tr("prop.fields") + "</b>", lbl_dims)
         self._content_layout.addWidget(grp_dims)
 
         self._content_layout.addStretch()
 
     def _show_raster_props(self, entry: LayerEntry):
         rl = entry.layer
-        # --- Cabecera ---
-        header_lbl = QLabel(f"<h2>{entry.name}</h2><p style='color: #888;'>Modelo Raster</p>")
+        # --- Header ---
+        header_lbl = QLabel(f"<h2>{entry.name}</h2><p style='color: #888;'>{tr('prop.raster_model')}</p>")
         header_lbl.setTextFormat(Qt.TextFormat.RichText)
         self._content_layout.addWidget(header_lbl)
 
-        # --- Info general ---
-        grp_info = QGroupBox("Información general")
+        # --- General info ---
+        grp_info = QGroupBox(tr("prop.general_info"))
         form = QFormLayout(grp_info)
         form.addRow("<b>" + tr("prop.filename") + "</b>", QLabel(rl.file_path or "—"))
-        form.addRow("<b>Tamaño archivo</b>", QLabel(self._get_file_size_str(rl.file_path)))
-        form.addRow("<b>Tamaño</b>", QLabel(f"{rl.width} × {rl.height} px"))
+        form.addRow("<b>" + tr("prop.file_size") + "</b>", QLabel(self._get_file_size_str(rl.file_path)))
+        form.addRow("<b>" + tr("prop.size") + "</b>", QLabel(f"{rl.width} × {rl.height} px"))
         form.addRow("<b>" + tr("prop.bands") + "</b>", QLabel(str(rl.band_count)))
         form.addRow("<b>" + tr("prop.resolution") + "</b>", QLabel(
             f"{rl.resolution[0]:.3f} × {rl.resolution[1]:.3f} m" if rl.resolution else "—"
         ))
-        lbl_crs = QLabel(f"EPSG:{rl.crs_epsg}" if rl.crs_epsg else tr("status.no_crs"))
-        lbl_crs.setToolTip("Sistema de Referencia de Coordenadas")
+        lbl_crs = QLabel(f"{tr('crs.epsg_prefix')}{rl.crs_epsg}" if rl.crs_epsg else tr("status.no_crs"))
+        lbl_crs.setToolTip(tr("prop.crs_tooltip"))
         form.addRow("<b>" + tr("prop.crs") + "</b>", lbl_crs)
         lbl_nodata = QLabel(str(rl.nodata))
-        lbl_nodata.setToolTip("Valor usado para representar píxeles sin información")
+        lbl_nodata.setToolTip(tr("prop.nodata_tooltip"))
         form.addRow("<b>" + tr("prop.nodata") + "</b>", lbl_nodata)
         self._content_layout.addWidget(grp_info)
 
-        # --- Extensión ---
+        # --- Extent ---
         bounds = rl.bounds
         if bounds:
             grp_bounds = QGroupBox(tr("prop.bounds"))
             form_b = QFormLayout(grp_bounds)
             w = bounds[2] - bounds[0]
             h = bounds[3] - bounds[1]
-            form_b.addRow("<b>X</b>", QLabel(f"{bounds[0]:.2f} m — {bounds[2]:.2f} m (Ancho: {w:.2f} m)"))
-            form_b.addRow("<b>Y</b>", QLabel(f"{bounds[1]:.2f} m — {bounds[3]:.2f} m (Alto: {h:.2f} m)"))
+            form_b.addRow("<b>" + tr("prop.x") + "</b>", QLabel(f"{bounds[0]:.2f} m — {bounds[2]:.2f} m (Width: {w:.2f} m)"))
+            form_b.addRow("<b>" + tr("prop.y") + "</b>", QLabel(f"{bounds[1]:.2f} m — {bounds[3]:.2f} m (Height: {h:.2f} m)"))
             self._content_layout.addWidget(grp_bounds)
 
-        # --- Estadísticas ---
+        # --- Statistics ---
         stats = rl.statistics()
         if stats:
             grp_stats = QGroupBox(tr("panel.statistics"))
@@ -202,7 +202,7 @@ class PropertiesPanel(QWidget):
             form_s.addRow("<b>" + tr("prop.min") + "</b>", QLabel(f"{stats['min']:.2f} m"))
             form_s.addRow("<b>" + tr("prop.max") + "</b>", QLabel(f"{stats['max']:.2f} m"))
             form_s.addRow("<b>" + tr("prop.mean") + "</b>", QLabel(f"{stats['mean']:.2f} m"))
-            form_s.addRow("<b>Desv. estándar</b>", QLabel(f"{stats['std']:.2f} m"))
+            form_s.addRow("<b>" + tr("prop.std_dev") + "</b>", QLabel(f"{stats['std']:.2f} m"))
             self._content_layout.addWidget(grp_stats)
 
         self._content_layout.addStretch()

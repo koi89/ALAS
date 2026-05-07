@@ -7,7 +7,7 @@
 QWidget {
     background-color: #000000;
     color: #e0e0e8;
-    font-family: "Segoe UI", "Inter", "Roboto", sans-serif;
+    font-family: "SF Pro Display", "Segoe UI", "Ubuntu", "Helvetica Neue", sans-serif;
     font-size: 13px;
     selection-background-color: #555555;
     selection-color: #ffffff;

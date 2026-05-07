@@ -1,6 +1,6 @@
 """
 ALAS — Log Panel
-Panel de registro de procesamiento con colores por nivel.
+Processing log panel with colors by level.
 """
 
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QPlainTextEdit, QPushButton, QHBoxLayout
@@ -8,10 +8,11 @@ from PyQt6.QtGui import QColor, QTextCharFormat
 from PyQt6.QtCore import Qt
 
 from app.logger import get_log_emitter
+from app.i18n import tr
 
 
 class LogPanel(QWidget):
-    """Panel que muestra los mensajes de log en tiempo real."""
+    """Panel that shows log messages in real time."""
 
     LEVEL_COLORS = {
         "DEBUG": "#888898",
@@ -38,7 +39,7 @@ class LogPanel(QWidget):
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
 
-        btn_clear = QPushButton("Limpiar")
+        btn_clear = QPushButton(tr("log.clear"))
         btn_clear.setFixedWidth(120)
         btn_clear.clicked.connect(self.text_edit.clear)
         btn_layout.addWidget(btn_clear)

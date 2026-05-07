@@ -1,6 +1,6 @@
 """
 ALAS — Export Dialog
-Diálogo de exportación con selección de formato y opciones.
+Export dialog with format selection and options.
 """
 
 from PyQt6.QtWidgets import (
@@ -20,12 +20,13 @@ from app.processing.exporters import (
 )
 from app.i18n import tr
 from app.logger import get_logger
+from app.log import log
 
 logger = get_logger("ui.export_dialog")
 
 
 class ExportDialog(QDialog):
-    """Diálogo de exportación."""
+    """Export dialog."""
 
     def __init__(self, layer_manager: LayerManager, parent=None,
                  preset_layer: int = None):
@@ -39,7 +40,7 @@ class ExportDialog(QDialog):
         layout = QVBoxLayout(self)
 
         # Layer selection
-        grp_layer = QGroupBox("Capa a exportar")
+        grp_layer = QGroupBox(tr("export.layer_to_export"))
         form_l = QFormLayout(grp_layer)
 
         self._layer_combo = QComboBox()
@@ -51,34 +52,34 @@ class ExportDialog(QDialog):
             self._layer_combo.setCurrentIndex(preset_layer)
 
         self._layer_combo.currentIndexChanged.connect(self._on_layer_changed)
-        form_l.addRow("Capa", self._layer_combo)
+        form_l.addRow(tr("export.layer"), self._layer_combo)
         layout.addWidget(grp_layer)
 
         # Format selection
-        grp_format = QGroupBox("Formato de exportación")
+        grp_format = QGroupBox(tr("export.format"))
         form_f = QFormLayout(grp_format)
 
         self._format_combo = QComboBox()
-        form_f.addRow("Formato", self._format_combo)
+        form_f.addRow(tr("export.format"), self._format_combo)
         layout.addWidget(grp_format)
 
         # Options
-        grp_opts = QGroupBox("Opciones")
+        grp_opts = QGroupBox(tr("export.options"))
         form_o = QFormLayout(grp_opts)
 
-        self._compress = QCheckBox("Compresión")
+        self._compress = QCheckBox(tr("export.compression"))
         self._compress.setChecked(True)
         form_o.addRow("", self._compress)
 
         layout.addWidget(grp_opts)
 
         # PDF report
-        grp_pdf = QGroupBox("Reporte PDF")
+        grp_pdf = QGroupBox(tr("export.pdf_report"))
         form_pdf = QFormLayout(grp_pdf)
-        self._gen_pdf = QCheckBox("Generar reporte PDF con estadísticas")
+        self._gen_pdf = QCheckBox(tr("export.generate_pdf"))
         form_pdf.addRow("", self._gen_pdf)
-        self._pdf_title = QLineEdit("Reporte ALAS")
-        form_pdf.addRow("Título", self._pdf_title)
+        self._pdf_title = QLineEdit(tr("export.default_title"))
+        form_pdf.addRow(tr("export.title"), self._pdf_title)
         layout.addWidget(grp_pdf)
 
         layout.addStretch()
@@ -91,7 +92,7 @@ class ExportDialog(QDialog):
         btn_cancel.clicked.connect(self.reject)
         btn_layout.addWidget(btn_cancel)
 
-        btn_export = QPushButton("💾 Exportar")
+        btn_export = QPushButton(tr("export.button"))
         btn_export.setObjectName("primary")
         btn_export.clicked.connect(self._export)
         btn_layout.addWidget(btn_export)
@@ -112,11 +113,11 @@ class ExportDialog(QDialog):
             return
 
         if entry.is_point_cloud:
-            self._format_combo.addItem("LAZ (comprimido)", "laz")
-            self._format_combo.addItem("LAS (sin comprimir)", "las")
+            self._format_combo.addItem(tr("export.laz_format"), "laz")
+            self._format_combo.addItem(tr("export.las_format"), "las")
         elif entry.is_raster:
-            self._format_combo.addItem("GeoTIFF (.tif)", "tif")
-            self._format_combo.addItem("OBJ 3D (.obj)", "obj")
+            self._format_combo.addItem(tr("export.geotiff_format"), "tif")
+            self._format_combo.addItem(tr("export.obj_format"), "obj")
 
     def _export(self):
         layer_idx = self._layer_combo.currentData()
@@ -131,8 +132,8 @@ class ExportDialog(QDialog):
         ext = f".{fmt}"
 
         path, _ = QFileDialog.getSaveFileName(
-            self, "Exportar", f"{entry.name}{ext}",
-            f"Archivos (*{ext})"
+            self, tr("export.dialog_title"), f"{entry.name}{ext}",
+            f"{tr('export.files_filter')} (*{ext})"
         )
         if not path:
             return
@@ -158,25 +159,25 @@ class ExportDialog(QDialog):
                     stats = entry.layer.statistics()
 
                 metadata = {
-                    "Capa": entry.name,
-                    "Formato": fmt.upper(),
-                    "Archivo exportado": str(path),
+                    tr("export.metadata_layer"): entry.name,
+                    tr("export.metadata_format"): fmt.upper(),
+                    tr("export.metadata_file"): str(path),
                 }
                 if entry.is_point_cloud:
-                    metadata["Puntos"] = f"{entry.layer.point_count:,}"
+                    metadata[tr("export.metadata_points")] = f"{entry.layer.point_count:,}"
                     if entry.layer.crs_epsg:
-                        metadata["CRS"] = f"EPSG:{entry.layer.crs_epsg}"
+                        metadata[tr("export.metadata_crs")] = f"EPSG:{entry.layer.crs_epsg}"
                 elif entry.is_raster:
-                    metadata["Tamaño"] = f"{entry.layer.width}×{entry.layer.height}"
+                    metadata[tr("export.metadata_size")] = f"{entry.layer.width}×{entry.layer.height}"
                     if entry.layer.crs_epsg:
-                        metadata["CRS"] = f"EPSG:{entry.layer.crs_epsg}"
+                        metadata[tr("export.metadata_crs")] = f"EPSG:{entry.layer.crs_epsg}"
 
                 export_pdf_report(
                     self._pdf_title.text(), metadata, stats, [], str(pdf_path)
                 )
 
-            QMessageBox.information(self, tr("success.exported"),
-                                     f"Exportado: {path}")
+            QMessageBox.information(self, tr("export.success"),
+                                     f"{tr('export.exported_message')} {path}")
             self.accept()
 
         except Exception as e:

@@ -1,6 +1,6 @@
 """
 ALAS — Measurements History Dialog
-Modal que muestra el historial completo de medidas realizadas en la sesion.
+Modal dialog showing the complete history of measurements made in the session.
 """
 
 from __future__ import annotations
@@ -16,15 +16,16 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor, QFont
 
 from app.logger import get_logger
+from app.i18n import tr
 
 logger = get_logger("ui.measurements_history")
 
-# Tipo -> (etiqueta, color texto fila)
+# Type -> (label, row text color)
 TYPE_META: Dict[str, tuple] = {
-    "area":      ("Area",      "#c0c0c0"),
-    "distancia": ("Distancia", "#c0c0c0"),
-    "volumen":   ("Volumen",   "#c0c0c0"),
-    "perfil":    ("Perfil",    "#c0c0c0"),
+    "area":      (tr("hist.area"),      "#c0c0c0"),
+    "distancia": (tr("hist.distance"), "#c0c0c0"),
+    "volumen":   (tr("hist.volume"),   "#c0c0c0"),
+    "perfil":    (tr("hist.profile"),    "#c0c0c0"),
 }
 
 
@@ -33,7 +34,7 @@ def _fmt(value: float, unit: str = "", decimals: int = 2) -> str:
 
 
 class MeasurementEntry:
-    """Encapsula una medida almacenada."""
+    """Encapsulates a stored measurement."""
 
     _counter = 0
 
@@ -50,18 +51,18 @@ class MeasurementEntry:
 
     @property
     def type_label(self) -> str:
-        label, _ = TYPE_META.get(self.mtype, ("Medida", "#c0c0c0"))
+        label, _ = TYPE_META.get(self.mtype, (tr("hist.measurement"), "#c0c0c0"))
         return label
 
     @property
     def summary(self) -> str:
         d = self.data
         if self.mtype == "area":
-            return _fmt(d.get("planimetric_area_m2", 0), "m2")
+            return _fmt(d.get("planimetric_area_m2", 0), "m²")
         if self.mtype == "distancia":
             return _fmt(d.get("distance_3d", 0), "m")
         if self.mtype == "volumen":
-            return _fmt(d.get("net_volume_m3", 0), "m3")
+            return _fmt(d.get("net_volume_m3", 0), "m³")
         if self.mtype == "perfil":
             return f"{_fmt(d.get('length_m', 0), 'm')}  dZ={_fmt(d.get('dz_m', 0), 'm')}"
         return "-"
@@ -76,50 +77,65 @@ class MeasurementEntry:
         d = self.data
         if self.mtype == "area":
             lines += [
-                f"  Area planimétrica : {_fmt(d.get('planimetric_area_m2', 0), 'm2')}",
+                f"  {tr('hist.planimetric_area')} : {_fmt(d.get('planimetric_area_m2', 0), 'm²')}",
                 f"                      {_fmt(d.get('planimetric_area_m2', 0) / 10000, 'ha', 4)}",
-                f"  Area superficial  : {_fmt(d.get('surface_area_m2', 0), 'm2') if d.get('used_raster') else '- (sin MDT)'}",
-                f"  Perimetro 2D      : {_fmt(d.get('perimeter_m', 0), 'm')}",
-                f"  Num. vertices     : {d.get('num_vertices', '-')}",
-                f"  Fuente            : {'MDT' if d.get('used_raster') else 'Shoelace (sin MDT)'}",
+                f"  {tr('hist.surface_area')}  : {_fmt(d.get('surface_area_m2', 0), 'm²') if d.get('used_raster') else tr('hist.without_dem')}",
+                f"  {tr('hist.perimeter_2d')}      : {_fmt(d.get('perimeter_m', 0), 'm')}",
+                f"  {tr('hist.num_vertices')}     : {d.get('num_vertices', '-')}",
+                f"  {tr('hist.source')}            : {tr('hist.source_dem') if d.get('used_raster') else tr('hist.source_no_dem')}",
             ]
+            verts = d.get('vertices', [])
+            if verts:
+                lines.append(f"  {tr('hist.vertices')}:")
+                for i, v in enumerate(verts[:10], 1):
+                    lines.append(f"    {i:2}. ({v.get('x', 0):.3f}, {v.get('y', 0):.3f}, {v.get('z', 0):.3f})")
+                if len(verts) > 10:
+                    lines.append(f"    ... {tr('hist.and_more').format(len(verts) - 10)}")
         elif self.mtype == "distancia":
             lines += [
-                f"  Distancia 3D  : {_fmt(d.get('distance_3d', 0), 'm')}",
-                f"  Distancia 2D  : {_fmt(d.get('distance_2d', 0), 'm')}",
-                f"  Desnivel (dZ) : {_fmt(d.get('dz', 0), 'm')}",
-                f"  Pendiente     : {_fmt(d.get('slope_degrees', 0), 'deg')} "
+                f"  {tr('hist.distance_3d')}  : {_fmt(d.get('distance_3d', 0), 'm')}",
+                f"  {tr('hist.distance_2d')}  : {_fmt(d.get('distance_2d', 0), 'm')}",
+                f"  {tr('hist.dz')} : {_fmt(d.get('dz', 0), 'm')}",
+                f"  {tr('hist.slope')}     : {_fmt(d.get('slope_degrees', 0), 'deg')} "
                 f"({_fmt(d.get('slope_percent', 0), '%')})",
-                f"  Punto A       : ({d.get('ax', 0):.3f}, {d.get('ay', 0):.3f}, {d.get('az', 0):.3f})",
-                f"  Punto B       : ({d.get('bx', 0):.3f}, {d.get('by', 0):.3f}, {d.get('bz', 0):.3f})",
+                f"  {tr('hist.point_a')}       : ({d.get('ax', 0):.3f}, {d.get('ay', 0):.3f}, {d.get('az', 0):.3f})",
+                f"  {tr('hist.point_b')}       : ({d.get('bx', 0):.3f}, {d.get('by', 0):.3f}, {d.get('bz', 0):.3f})",
             ]
         elif self.mtype == "volumen":
             lines += [
-                f"  Corte    : {_fmt(d.get('cut_volume_m3', 0), 'm3')}",
-                f"  Relleno  : {_fmt(d.get('fill_volume_m3', 0), 'm3')}",
-                f"  Neto     : {_fmt(d.get('net_volume_m3', 0), 'm3')}",
-                f"  Area base: {_fmt(d.get('area_m2', 0), 'm2')}",
-                f"  Z ref.   : {_fmt(d.get('reference_z', 0), 'm')}",
+                f"  {tr('hist.cut')}    : {_fmt(d.get('cut_volume_m3', 0), 'm³')}",
+                f"  {tr('hist.fill')}  : {_fmt(d.get('fill_volume_m3', 0), 'm³')}",
+                f"  {tr('hist.net')}     : {_fmt(d.get('net_volume_m3', 0), 'm³')}",
+                f"  {tr('hist.base_area')}: {_fmt(d.get('area_m2', 0), 'm²')}",
+                f"  {tr('hist.z_ref')}   : {_fmt(d.get('reference_z', 0), 'm')}",
+                f"  {tr('hist.num_vertices')} : {d.get('num_vertices', '-')}",
             ]
+            verts = d.get('vertices', [])
+            if verts:
+                lines.append(f"  {tr('hist.vertices')}:")
+                for i, v in enumerate(verts[:10], 1):
+                    lines.append(f"    {i:2}. ({v.get('x', 0):.3f}, {v.get('y', 0):.3f}, {v.get('z', 0):.3f})")
+                if len(verts) > 10:
+                    lines.append(f"    ... {tr('hist.and_more').format(len(verts) - 10)}")
         elif self.mtype == "perfil":
             lines += [
-                f"  Longitud : {_fmt(d.get('length_m', 0), 'm')}",
-                f"  Z min    : {_fmt(d.get('z_min', 0), 'm')}",
-                f"  Z max    : {_fmt(d.get('z_max', 0), 'm')}",
-                f"  dZ       : {_fmt(d.get('dz_m', 0), 'm')}",
+                f"  {tr('hist.length')} : {_fmt(d.get('length_m', 0), 'm')}",
+                f"  {tr('hist.z_min')}    : {_fmt(d.get('z_min', 0), 'm')}",
+                f"  {tr('hist.z_max')}    : {_fmt(d.get('z_max', 0), 'm')}",
+                f"  {tr('hist.dz')}       : {_fmt(d.get('dz_m', 0), 'm')}",
             ]
         return "\n".join(lines)
 
 
 class MeasurementsHistoryDialog(QDialog):
     """
-    Modal no bloqueante con el historial de medidas de la sesion.
-    Se oculta al cerrar, nunca se destruye.
+    Non-blocking modal dialog with the session measurement history.
+    Hides on close, never destroyed.
     """
 
     def __init__(self, parent=None):
         super().__init__(parent, Qt.WindowType.Window)
-        self.setWindowTitle("Historial de Medidas")
+        self.setWindowTitle(tr("hist.title"))
         self.setMinimumSize(740, 500)
         self.resize(880, 560)
         self._entries: List[MeasurementEntry] = []
@@ -139,12 +155,12 @@ class MeasurementsHistoryDialog(QDialog):
         hdr = QHBoxLayout()
         hdr.setSpacing(0)
 
-        title = QLabel("Historial de Medidas")
+        title = QLabel(tr("hist.title"))
         title.setObjectName("hist_title")
         hdr.addWidget(title)
         hdr.addStretch()
 
-        self._count_label = QLabel("0 medidas")
+        self._count_label = QLabel(tr("hist.count_zero"))
         self._count_label.setObjectName("count_label")
         hdr.addWidget(self._count_label)
         root.addLayout(hdr)
@@ -166,12 +182,12 @@ class MeasurementsHistoryDialog(QDialog):
         left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.setSpacing(0)
 
-        col_header = QLabel("MEDIDAS")
+        col_header = QLabel(tr("hist.measurements"))
         col_header.setObjectName("section_label")
         left_layout.addWidget(col_header)
 
         self._table = QTableWidget(0, 4)
-        self._table.setHorizontalHeaderLabels(["#", "Hora", "Tipo", "Resultado"])
+        self._table.setHorizontalHeaderLabels([tr("hist.col_id"), tr("hist.col_time"), tr("hist.col_type"), tr("hist.col_result")])
         self._table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         self._table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         self._table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
@@ -185,8 +201,7 @@ class MeasurementsHistoryDialog(QDialog):
         left_layout.addWidget(self._table)
 
         self._empty_label = QLabel(
-            "Sin medidas en esta sesion.\n\n"
-            "Usa las herramientas del menu\nHerramientas para comenzar."
+            tr("hist.empty_message")
         )
         self._empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._empty_label.setObjectName("empty_label")
@@ -201,14 +216,14 @@ class MeasurementsHistoryDialog(QDialog):
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(0)
 
-        detail_header = QLabel("DETALLE")
+        detail_header = QLabel(tr("hist.detail"))
         detail_header.setObjectName("section_label")
         right_layout.addWidget(detail_header)
 
         self._detail_text = QTextEdit()
         self._detail_text.setReadOnly(True)
         self._detail_text.setObjectName("detail_text")
-        self._detail_text.setPlaceholderText("Selecciona una fila para ver el detalle.")
+        self._detail_text.setPlaceholderText(tr("hist.placeholder"))
         right_layout.addWidget(self._detail_text)
 
         splitter.addWidget(right_container)
@@ -220,23 +235,23 @@ class MeasurementsHistoryDialog(QDialog):
         btn_row = QHBoxLayout()
         btn_row.setSpacing(8)
 
-        self._btn_copy = QPushButton("Copiar detalle")
+        self._btn_copy = QPushButton(tr("hist.copy_detail"))
         self._btn_copy.setEnabled(False)
         self._btn_copy.clicked.connect(self._copy_detail)
         btn_row.addWidget(self._btn_copy)
 
-        self._btn_copy_all = QPushButton("Copiar todo")
+        self._btn_copy_all = QPushButton(tr("hist.copy_all"))
         self._btn_copy_all.clicked.connect(self._copy_all)
         btn_row.addWidget(self._btn_copy_all)
 
         btn_row.addStretch()
 
-        self._btn_clear = QPushButton("Limpiar historial")
+        self._btn_clear = QPushButton(tr("hist.clear_history"))
         self._btn_clear.setObjectName("btn_danger")
         self._btn_clear.clicked.connect(self._clear_history)
         btn_row.addWidget(self._btn_clear)
 
-        btn_close = QPushButton("Cerrar")
+        btn_close = QPushButton(tr("dialog.close"))
         btn_close.setObjectName("btn_close")
         btn_close.clicked.connect(self.hide)
         btn_row.addWidget(btn_close)
@@ -248,7 +263,7 @@ class MeasurementsHistoryDialog(QDialog):
             QDialog {
                 background: #0a0a0a;
                 color: #d0d0d0;
-                font-family: 'Segoe UI', sans-serif;
+                font-family: 'SF Pro Display', 'Segoe UI', 'Ubuntu', 'Helvetica Neue', sans-serif;
                 font-size: 13px;
             }
 
@@ -417,7 +432,7 @@ class MeasurementsHistoryDialog(QDialog):
         self._entries.append(entry)
         self._add_row(entry)
         self._update_counter()
-        logger.debug(f"Medida #{entry.id} ({mtype}) guardada en historial")
+        logger.debug(f"Measurement #{entry.id} ({mtype}) saved to history")
         return entry
 
     def show_and_raise(self):
@@ -434,7 +449,7 @@ class MeasurementsHistoryDialog(QDialog):
         self._table.insertRow(row)
         self._table.setRowHeight(row, 34)
 
-        _, fg_hex = TYPE_META.get(entry.mtype, ("Medida", "#c0c0c0"))
+        _, fg_hex = TYPE_META.get(entry.mtype, (tr("hist.measurement"), "#c0c0c0"))
         fg = QColor(fg_hex)
         bg = QColor("#0e0e0e")
 
@@ -458,7 +473,7 @@ class MeasurementsHistoryDialog(QDialog):
 
     def _update_counter(self):
         n = len(self._entries)
-        self._count_label.setText(f"{n} medida{'s' if n != 1 else ''}")
+        self._count_label.setText(tr("hist.count").format(n))
 
     def _on_selection(self):
         rows = self._table.selectionModel().selectedRows()
@@ -482,17 +497,16 @@ class MeasurementsHistoryDialog(QDialog):
         all_text = "\n\n".join(e.detail_text() for e in self._entries)
         QApplication.clipboard().setText(all_text)
         QMessageBox.information(
-            self, "Copiado",
-            f"Se han copiado {len(self._entries)} medidas al portapapeles."
+            self, tr("hist.copied_title"),
+            tr("hist.copied_message").format(len(self._entries))
         )
 
     def _clear_history(self):
         if not self._entries:
             return
         reply = QMessageBox.question(
-            self, "Limpiar historial",
-            f"Eliminar las {len(self._entries)} medidas del historial?\n"
-            "Esta accion no se puede deshacer.",
+            self, tr("hist.clear_confirm_title"),
+            tr("hist.clear_confirm_message").format(len(self._entries)),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel
         )
         if reply == QMessageBox.StandardButton.Yes:

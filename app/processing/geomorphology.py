@@ -1,6 +1,6 @@
 """
 ALAS — Geomorphology
-Análisis geomorfológico: pendiente, orientación, curvatura, rugosidad, sombreado.
+Geomorphological analysis: slope, aspect, curvature, roughness, hillshade.
 """
 
 import numpy as np
@@ -18,8 +18,8 @@ logger = get_logger("processing.geomorphology")
 
 
 def calculate_slope(dtm: RasterLayer) -> RasterLayer:
-    """Calcula la pendiente en grados."""
-    logger.info("Calculando pendiente...")
+    """Calculates slope in degrees."""
+    logger.info("Calculating slope...")
     import richdem as rd
 
     arr = dtm.get_band(0).copy()
@@ -35,19 +35,19 @@ def calculate_slope(dtm: RasterLayer) -> RasterLayer:
 
     result = RasterLayer.from_array(
         slope_arr, dtm.bounds, epsg=dtm.crs_epsg,
-        nodata=DEFAULT_NODATA, name="Pendiente"
+        nodata=DEFAULT_NODATA, name="Slope"
     )
     result.transform = dtm.transform
     result.crs = dtm.crs
 
     stats = result.statistics()
-    logger.info(f"Pendiente: {stats.get('min', 0):.1f}° - {stats.get('max', 0):.1f}°")
+    logger.info(f"Slope: {stats.get('min', 0):.1f}° - {stats.get('max', 0):.1f}°")
     return result
 
 
 def calculate_aspect(dtm: RasterLayer) -> RasterLayer:
-    """Calcula la orientación (aspecto) en grados (0-360)."""
-    logger.info("Calculando orientación...")
+    """Calculates aspect in degrees (0-360)."""
+    logger.info("Calculating aspect...")
     import richdem as rd
 
     arr = dtm.get_band(0).copy()
@@ -63,7 +63,7 @@ def calculate_aspect(dtm: RasterLayer) -> RasterLayer:
 
     result = RasterLayer.from_array(
         aspect_arr, dtm.bounds, epsg=dtm.crs_epsg,
-        nodata=DEFAULT_NODATA, name="Orientación"
+        nodata=DEFAULT_NODATA, name="Aspect"
     )
     result.transform = dtm.transform
     result.crs = dtm.crs
@@ -73,10 +73,10 @@ def calculate_aspect(dtm: RasterLayer) -> RasterLayer:
 def calculate_curvature(dtm: RasterLayer,
                          curvature_type: str = "profile") -> RasterLayer:
     """
-    Calcula la curvatura del terreno.
-    curvature_type: 'profile', 'planform', o 'total'
+    Calculates terrain curvature.
+    curvature_type: 'profile', 'planform', or 'total'
     """
-    logger.info(f"Calculando curvatura ({curvature_type})...")
+    logger.info(f"Calculating curvature ({curvature_type})...")
     import richdem as rd
 
     arr = dtm.get_band(0).copy()
@@ -99,7 +99,7 @@ def calculate_curvature(dtm: RasterLayer,
 
     result = RasterLayer.from_array(
         curv_arr, dtm.bounds, epsg=dtm.crs_epsg,
-        nodata=DEFAULT_NODATA, name=f"Curvatura_{curvature_type}"
+        nodata=DEFAULT_NODATA, name=f"Curvature_{curvature_type}"
     )
     result.transform = dtm.transform
     result.crs = dtm.crs
@@ -108,10 +108,10 @@ def calculate_curvature(dtm: RasterLayer,
 
 def calculate_roughness(dtm: RasterLayer, window: int = 3) -> RasterLayer:
     """
-    Calcula el índice de rugosidad del terreno (TRI).
-    TRI = diferencia media entre una celda y sus vecinas.
+    Calculates terrain roughness index (TRI).
+    TRI = mean difference between a cell and its neighbors.
     """
-    logger.info(f"Calculando rugosidad (ventana={window})...")
+    logger.info(f"Calculating roughness (window={window})...")
     from scipy.ndimage import generic_filter
 
     arr = dtm.get_band(0).copy().astype(np.float64)
@@ -132,7 +132,7 @@ def calculate_roughness(dtm: RasterLayer, window: int = 3) -> RasterLayer:
 
     result = RasterLayer.from_array(
         roughness, dtm.bounds, epsg=dtm.crs_epsg,
-        nodata=DEFAULT_NODATA, name="Rugosidad"
+        nodata=DEFAULT_NODATA, name="Roughness"
     )
     result.transform = dtm.transform
     result.crs = dtm.crs
@@ -143,21 +143,21 @@ def calculate_hillshade(dtm: RasterLayer,
                          azimuth: float = None,
                          altitude: float = None) -> RasterLayer:
     """
-    Calcula el sombreado del relieve (hillshade).
-    azimuth: dirección del sol (grados, 0=Norte, 315=default)
-    altitude: altura del sol sobre el horizonte (grados)
+    Calculates relief hillshade.
+    azimuth: sun direction (degrees, 0=North, 315=default)
+    altitude: sun height above horizon (degrees)
     """
     azimuth = azimuth or DEFAULT_HILLSHADE_AZIMUTH
     altitude = altitude or DEFAULT_HILLSHADE_ALTITUDE
 
-    logger.info(f"Calculando hillshade (azimut={azimuth}°, altitud={altitude}°)")
+    logger.info(f"Calculating hillshade (azimuth={azimuth}°, altitude={altitude}°)")
 
     arr = dtm.get_band(0).copy().astype(np.float64)
     arr[arr == dtm.nodata] = np.nan
 
     res = dtm.resolution[0] if dtm.resolution else 1.0
 
-    # Calcular gradientes
+    # Calculate gradients
     dy, dx = np.gradient(arr, res)
 
     # Hillshade formula
@@ -173,7 +173,7 @@ def calculate_hillshade(dtm: RasterLayer,
         np.cos(az_rad - aspect_rad)
     )
 
-    # Normalizar a 0-255
+    # Normalize to 0-255
     hillshade = np.clip(hillshade * 255, 0, 255).astype(np.float32)
     hillshade[np.isnan(arr)] = DEFAULT_NODATA
 
@@ -188,11 +188,11 @@ def calculate_hillshade(dtm: RasterLayer,
 
 def morphometric_classification(dtm: RasterLayer) -> RasterLayer:
     """
-    Clasificación morfométrica: crestas, vaguadas y llanuras
-    basada en curvatura del perfil y curvatura planimétrica.
-    Valores: 1=cresta, 2=vaguada, 3=llanura
+    Morphometric classification: ridges, valleys, and plains
+    based on profile curvature and planform curvature.
+    Values: 1=ridge, 2=valley, 3=plain
     """
-    logger.info("Clasificación morfométrica...")
+    logger.info("Morphometric classification...")
     import richdem as rd
 
     arr = dtm.get_band(0).copy()
@@ -205,13 +205,13 @@ def morphometric_classification(dtm: RasterLayer) -> RasterLayer:
     profile = np.array(rd.TerrainAttribute(rd_dem, attrib='profile_curvature'), dtype=np.float32)
     planform = np.array(rd.TerrainAttribute(rd_dem, attrib='planform_curvature'), dtype=np.float32)
 
-    morph = np.full_like(profile, 3, dtype=np.float32)  # Default: llanura
+    morph = np.full_like(profile, 3, dtype=np.float32)  # Default: plain
 
-    # Crestas: curvatura perfil positiva y planform negativa
+    # Ridges: positive profile curvature and negative planform
     ridges = (profile > 0.01) & (planform < -0.01)
     morph[ridges] = 1
 
-    # Vaguadas: curvatura perfil negativa y planform positiva
+    # Valleys: negative profile curvature and positive planform
     valleys = (profile < -0.01) & (planform > 0.01)
     morph[valleys] = 2
 
@@ -219,7 +219,7 @@ def morphometric_classification(dtm: RasterLayer) -> RasterLayer:
 
     result = RasterLayer.from_array(
         morph, dtm.bounds, epsg=dtm.crs_epsg,
-        nodata=DEFAULT_NODATA, name="Morfometría"
+        nodata=DEFAULT_NODATA, name="Morphometry"
     )
     result.transform = dtm.transform
     result.crs = dtm.crs

@@ -1,39 +1,39 @@
 """
 ALAS — Aerial LiDAR Analysis Software
-Punto de entrada principal de la aplicación.
+Main entry point of the application.
 
 conda env create -f environment.yml || conda env update -f environment.yml; conda run -n alas python main.py
 """
 import os
 os.environ["PYTHONIOENCODING"] = "utf-8"
-os.environ["PDAL_DRIVER_PATH"] = ""   # fuerza PDAL a no buscar plugins con rutas non-ASCII
-os.environ["LC_ALL"] = "C"            # locale ASCII puro — funciona en Mac, Linux y WSL
+os.environ["PDAL_DRIVER_PATH"] = ""   # force PDAL to not search for plugins with non-ASCII paths
+os.environ["LC_ALL"] = "C"            # pure ASCII locale — works on Mac, Linux and WSL
 os.environ["LANG"] = "C"
 
 import sys
 from pathlib import Path
 
-# Asegurar que el directorio raíz está en el path
+# Ensure the root directory is in the path
 ROOT_DIR = Path(__file__).resolve().parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 
 def main():
-    """Inicia la aplicación ALAS."""
-    # Importar Qt antes que nada
+    """Start the ALAS application."""
+    # Import Qt first
     from PyQt6.QtWidgets import QApplication, QSplashScreen
     from PyQt6.QtGui import QPixmap, QFont, QColor, QPainter
     from PyQt6.QtCore import Qt, QTimer, QCoreApplication
 
     # --- Performance and Graphics fixes for Windows ---
     if sys.platform == "win32":
-        # Forzar el uso de OpenGL de escritorio en lugar de ANGLE (Direct3D)
-        # Esto es vital para que VTK/PyVista funcione con aceleración real en Windows
+        # Force the use of desktop OpenGL instead of ANGLE (Direct3D)
+        # This is vital for VTK/PyVista to work with real acceleration on Windows
         QCoreApplication.setAttribute(Qt.ApplicationAttribute.AA_UseDesktopOpenGL)
         QCoreApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts)
         
-        # Variables de entorno adicionales para asegurar el backend de OpenGL
+        # Additional environment variables to ensure the OpenGL backend
         os.environ["QSG_RHI_BACKEND"] = "opengl"
         os.environ["PYVISTA_OFF_SCREEN"] = "false"
 
@@ -49,7 +49,7 @@ def main():
     painter = QPainter(splash_pixmap)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-    # Fondo gradiente
+    # Gradient background
     from PyQt6.QtGui import QLinearGradient
     gradient = QLinearGradient(0, 0, 600, 380)
     gradient.setColorAt(0, QColor("#000000"))
@@ -128,7 +128,7 @@ def main():
 
 
 def _show_window(window, splash):
-    """Muestra la ventana principal y cierra el splash."""
+    """Show the main window and close the splash."""
     window.show()
     splash.finish(window)
 

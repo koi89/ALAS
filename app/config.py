@@ -1,6 +1,6 @@
 """
 ALAS — Configuration & Constants
-Constantes globales, códigos ASPRS, paletas de colores, filtros de archivo.
+Global constants, ASPRS codes, color palettes, file filters.
 """
 
 import os
@@ -38,9 +38,9 @@ RASTER_EXTENSIONS = [".tif", ".tiff", ".geotiff"]
 VECTOR_EXTENSIONS = [".shp", ".geojson", ".gpkg"]
 MESH_EXTENSIONS = [".obj", ".ply", ".stl"]
 
-POINT_CLOUD_FILTER = "Nubes de puntos (*.las *.laz);;Todos los archivos (*)"
-RASTER_FILTER = "GeoTIFF (*.tif *.tiff);;Todos los archivos (*)"
-VECTOR_FILTER = "Shapefile (*.shp);;GeoJSON (*.geojson);;GeoPackage (*.gpkg);;Todos (*)"
+POINT_CLOUD_FILTER = "Point clouds (*.las *.laz);;All files (*)"
+RASTER_FILTER = "GeoTIFF (*.tif *.tiff);;All files (*)"
+VECTOR_FILTER = "Shapefile (*.shp);;GeoJSON (*.geojson);;GeoPackage (*.gpkg);;All (*)"
 
 # ---------------------------------------------------------------------------
 # ASPRS LAS Classification Codes (v1.4)
@@ -67,25 +67,25 @@ ASPRS_CLASSIFICATION = {
     18: "High Noise",
 }
 
-# Colores ASPRS estándar (RGBA 0-255)
+# Standard ASPRS colors (RGBA 0-255)
 ASPRS_COLORS = {
-    0: (180, 180, 180, 255),   # Gris claro
-    1: (200, 200, 200, 255),   # Gris
-    2: (139, 90, 43, 255),     # Marrón tierra
-    3: (144, 238, 144, 255),   # Verde claro
-    4: (34, 139, 34, 255),     # Verde medio
-    5: (0, 100, 0, 255),       # Verde oscuro
-    6: (255, 0, 0, 255),       # Rojo edificios
-    7: (255, 105, 180, 255),   # Rosa ruido
-    8: (255, 255, 0, 255),     # Amarillo
-    9: (0, 0, 255, 255),       # Azul agua
+    0: (180, 180, 180, 255),   # Light gray
+    1: (200, 200, 200, 255),   # Gray
+    2: (139, 90, 43, 255),     # Brown earth
+    3: (144, 238, 144, 255),   # Light green
+    4: (34, 139, 34, 255),     # Medium green
+    5: (0, 100, 0, 255),       # Dark green
+    6: (255, 0, 0, 255),       # Red buildings
+    7: (255, 105, 180, 255),   # Pink noise
+    8: (255, 255, 0, 255),     # Yellow
+    9: (0, 0, 255, 255),       # Blue water
     10: (160, 82, 45, 255),    # Sienna rail
-    11: (64, 64, 64, 255),     # Gris oscuro carretera
-    12: (255, 165, 0, 255),    # Naranja overlap
-    13: (128, 0, 128, 255),    # Púrpura
-    14: (255, 215, 0, 255),    # Oro
-    15: (192, 192, 192, 255),  # Plata
-    16: (0, 255, 255, 255),    # Cian
+    11: (64, 64, 64, 255),     # Dark gray road
+    12: (255, 165, 0, 255),    # Orange overlap
+    13: (128, 0, 128, 255),    # Purple
+    14: (255, 215, 0, 255),    # Gold
+    15: (192, 192, 192, 255),  # Silver
+    16: (0, 255, 255, 255),    # Cyan
     17: (210, 180, 140, 255),  # Tan
     18: (255, 0, 255, 255),    # Magenta
 }
@@ -124,7 +124,7 @@ DEFAULT_CHM_CMAP = "YlGn"
 # ---------------------------------------------------------------------------
 # DEM generation defaults
 # ---------------------------------------------------------------------------
-DEFAULT_DEM_RESOLUTION = 1.0           # metros
+DEFAULT_DEM_RESOLUTION = 1.0           # meters
 DEFAULT_INTERPOLATION_METHOD = "idw"   # idw, tin, nearest
 DEFAULT_IDW_POWER = 2.0
 DEFAULT_GEOTIFF_COMPRESS = "lzw"
@@ -157,9 +157,9 @@ PMF_DEFAULTS = {
 # ---------------------------------------------------------------------------
 # Vegetation analysis defaults
 # ---------------------------------------------------------------------------
-DEFAULT_MIN_TREE_HEIGHT = 2.0   # metros
-DEFAULT_CROWN_WINDOW = 5        # píxeles
-DEFAULT_CANOPY_CELL_SIZE = 10   # metros
+DEFAULT_MIN_TREE_HEIGHT = 2.0   # meters
+DEFAULT_CROWN_WINDOW = 5        # pixels
+DEFAULT_CANOPY_CELL_SIZE = 10   # meters
 
 # ---------------------------------------------------------------------------
 # Hillshade defaults
@@ -170,18 +170,18 @@ DEFAULT_HILLSHADE_ALTITUDE = 45.0
 # ---------------------------------------------------------------------------
 # Hydrology defaults
 # ---------------------------------------------------------------------------
-DEFAULT_FLOW_ACC_THRESHOLD = 1000  # celdas acumuladas para red de drenaje
+DEFAULT_FLOW_ACC_THRESHOLD = 1000  # accumulated cells for drainage network
 
 # ---------------------------------------------------------------------------
 # Visualization defaults
 # ---------------------------------------------------------------------------
 DEFAULT_POINT_SIZE = 2.0
 DEFAULT_BACKGROUND_COLOR = "#000000"
-MAX_VIEWPORT_POINTS = 50_000_000   # decimado automático si se excede
-VOXEL_DOWNSAMPLE_SIZE = 0.5       # metros por defecto
+MAX_VIEWPORT_POINTS = 50_000_000   # automatic decimation if exceeded
+VOXEL_DOWNSAMPLE_SIZE = 0.5       # meters by default
 
 # ---------------------------------------------------------------------------
-# Above-ground classification height thresholds (metros)
+# Above-ground classification height thresholds (meters)
 # ---------------------------------------------------------------------------
 LOW_VEG_MAX_HEIGHT = 0.5
 MEDIUM_VEG_MAX_HEIGHT = 2.0
@@ -191,7 +191,7 @@ BUILDING_MIN_HEIGHT = 2.0
 # ---------------------------------------------------------------------------
 # Change detection defaults
 # ---------------------------------------------------------------------------
-DEFAULT_DOD_THRESHOLD = 0.3  # metros, umbral erosión/deposición
+DEFAULT_DOD_THRESHOLD = 0.3  # meters, erosion/deposition threshold
 
 # ---------------------------------------------------------------------------
 # Languages
