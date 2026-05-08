@@ -284,6 +284,16 @@ _TRANSLATIONS = {
     "analysis.completed_hydro": {"es": "Análisis hidrológico completado.\nPresione 'Ver resultados' para ver las imágenes.", "en": "Hydrological analysis completed.\nPress 'View results' to see the images."},
     "analysis.no_raster_layers": {"es": "(Sin capas ráster)", "en": "(No raster layers)"},
     "analysis.result": {"es": "Resultado: {}", "en": "Result: {}"},
+    "analysis.history": {"es": "Historial", "en": "History"},
+    "analysis.no_history": {"es": "Sin análisis en el historial.", "en": "No analyses in the history."},
+    "analysis.history_title": {"es": "Historial de análisis", "en": "Analysis History"},
+    "analysis.export_pdf": {"es": "Exportar a PDF", "en": "Export to PDF"},
+    "analysis.timestamp": {"es": "Marca de tiempo", "en": "Timestamp"},
+    "analysis.geomorph_results": {"es": "Resultados geomorfológicos", "en": "Geomorphological Results"},
+    "analysis.veg_results": {"es": "Resultados de vegetación", "en": "Vegetation Results"},
+    "analysis.multi_results": {"es": "Resultados multitemporales", "en": "Multitemporal Results"},
+    "analysis.results": {"es": "Resultados de análisis", "en": "Analysis Results"},
+    "analysis.trees_detected_label": {"es": "Árboles detectados", "en": "Trees detected"},
 
     # --- Classification Dialog ---
     "classify.algorithm": {"es": "Algoritmo", "en": "Algorithm"},
@@ -333,6 +343,9 @@ _TRANSLATIONS = {
     "hydro.legend_rainfall": {"es": "Escurrimiento por precipitación (m³/h):", "en": "Runoff by Precipitation (m³/h):"},
     "hydro.legend_runoff_title": {"es": "Escurrimiento por precipitación — {} mm/h", "en": "Runoff by Precipitation — {} mm/h"},
     "hydro.legend_flood_title": {"es": "Simulación de inundación — Nivel {} m", "en": "Flood Simulation — Level {} m"},
+    "hydro.export_pdf": {"es": "Exportar a PDF", "en": "Export to PDF"},
+    "hydro.timestamp": {"es": "Marca de tiempo", "en": "Timestamp"},
+    "hydro.pdf_title": {"es": "Informe de Análisis Hidrológico", "en": "Hydrological Analysis Report"},
 
     # --- Export Dialog ---
     "export.default_title": {"es": "Informe ALAS", "en": "ALAS Report"},

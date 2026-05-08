@@ -485,6 +485,8 @@ class AnalysisDialog(QDialog):
             
         l.addWidget(list_widget)
         
+        btn_layout = QHBoxLayout()
+        
         btn_open = QPushButton(tr("analysis.view_results"))
         def on_open():
             selected = list_widget.currentItem()
@@ -502,7 +504,50 @@ class AnalysisDialog(QDialog):
                 results_window.show()
                 
         btn_open.clicked.connect(on_open)
-        l.addWidget(btn_open)
+        btn_layout.addWidget(btn_open)
+        
+        btn_export_pdf = QPushButton(tr("hydro.export_pdf"))
+        def on_export_pdf():
+            selected = list_widget.currentItem()
+            if selected:
+                idx = selected.data(Qt.ItemDataRole.UserRole)
+                res = history[idx]["results"]
+                item = history[idx]
+                
+                path, _ = QFileDialog.getSaveFileName(
+                    dlg, tr("export.dialog_title"), 
+                    f"hydro_analysis_{item['timestamp'].replace(':', '-')}.pdf",
+                    f"{tr('export.files_filter')} (*.pdf)"
+                )
+                if not path:
+                    return
+                
+                from app.processing.exporters import export_pdf_report
+                
+                metadata = {
+                    tr("analysis.history_dem"): item['layer'],
+                    tr("hydro.timestamp"): item['timestamp'],
+                    tr("analysis.history_layers"): f"{len(res)}"
+                }
+                
+                statistics = {}
+                for layer_type, raster_layer in res.items():
+                    if hasattr(raster_layer, 'statistics'):
+                        layer_stats = raster_layer.statistics()
+                        for key, value in layer_stats.items():
+                            statistics[f"{layer_type} - {key}"] = value
+                
+                export_pdf_report(
+                    tr("hydro.pdf_title"), metadata, statistics, [], path
+                )
+                
+                QMessageBox.information(dlg, tr("export.success"),
+                                       f"{tr('export.exported_message')} {path}")
+                
+        btn_export_pdf.clicked.connect(on_export_pdf)
+        btn_layout.addWidget(btn_export_pdf)
+        
+        l.addLayout(btn_layout)
         
         dlg.show()
         dlg.raise_()
