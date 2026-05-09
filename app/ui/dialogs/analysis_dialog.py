@@ -6,7 +6,7 @@ Unified analysis dialog with tabs: geomorphology, hydrology, vegetation, multite
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QTabWidget, QGroupBox,
     QFormLayout, QDoubleSpinBox, QSpinBox, QComboBox, QCheckBox,
-    QPushButton, QLabel, QMessageBox, QFileDialog,
+    QPushButton, QLabel, QMessageBox, QFileDialog, QInputDialog,
     QWidget, QScrollArea, QMainWindow, QListWidget, QListWidgetItem
 )
 from PyQt6.QtGui import QPixmap
@@ -513,40 +513,104 @@ class AnalysisDialog(QDialog):
                 idx = selected.data(Qt.ItemDataRole.UserRole)
                 res = history[idx]["results"]
                 item = history[idx]
-                
+
                 path, _ = QFileDialog.getSaveFileName(
-                    dlg, tr("export.dialog_title"), 
+                    dlg, tr("export.dialog_title"),
                     f"hydro_analysis_{item['timestamp'].replace(':', '-')}.pdf",
                     f"{tr('export.files_filter')} (*.pdf)"
                 )
                 if not path:
                     return
-                
+
                 from app.processing.exporters import export_pdf_report
-                
+
                 metadata = {
                     tr("analysis.history_dem"): item['layer'],
                     tr("hydro.timestamp"): item['timestamp'],
                     tr("analysis.history_layers"): f"{len(res)}"
                 }
-                
+
                 statistics = {}
                 for layer_type, raster_layer in res.items():
                     if hasattr(raster_layer, 'statistics'):
                         layer_stats = raster_layer.statistics()
                         for key, value in layer_stats.items():
                             statistics[f"{layer_type} - {key}"] = value
-                
+
                 export_pdf_report(
                     tr("hydro.pdf_title"), metadata, statistics, [], path
                 )
-                
+
                 QMessageBox.information(dlg, tr("export.success"),
                                        f"{tr('export.exported_message')} {path}")
-                
+
         btn_export_pdf.clicked.connect(on_export_pdf)
         btn_layout.addWidget(btn_export_pdf)
-        
+
+        btn_save_reports = QPushButton(tr("hydro.save_to_reports"))
+        def on_save_to_reports():
+            selected = list_widget.currentItem()
+            if not selected:
+                return
+
+            main_win = self.parent()
+            user = getattr(main_win, "_current_user", None)
+            if user is None:
+                QMessageBox.warning(dlg, tr("reports.title"), tr("reports.no_user"))
+                return
+
+            idx = selected.data(Qt.ItemDataRole.UserRole)
+            res = history[idx]["results"]
+            item = history[idx]
+
+            title, ok = QInputDialog.getText(
+                dlg, tr("reports.title_input"), tr("reports.save_title_prompt"),
+                text=f"{tr('hydro.pdf_title')} {item['timestamp']}"
+            )
+            if not ok or not title.strip():
+                return
+
+            import datetime as _dt
+            reports_dir = (
+                __import__("pathlib").Path.home()
+                / ".alas" / "reports" / str(user.id)
+            )
+            reports_dir.mkdir(parents=True, exist_ok=True)
+
+            safe_ts = item['timestamp'].replace(':', '-')
+            pdf_path = reports_dir / f"hydro_{safe_ts}.pdf"
+
+            from app.processing.exporters import export_pdf_report
+            metadata = {
+                tr("analysis.history_dem"): item['layer'],
+                tr("hydro.timestamp"): item['timestamp'],
+                tr("analysis.history_layers"): f"{len(res)}"
+            }
+            statistics = {}
+            for layer_type, raster_layer in res.items():
+                if hasattr(raster_layer, 'statistics'):
+                    for key, value in raster_layer.statistics().items():
+                        statistics[f"{layer_type} - {key}"] = value
+
+            try:
+                export_pdf_report(
+                    title.strip(), metadata, statistics, [], str(pdf_path)
+                )
+            except Exception as e:
+                QMessageBox.critical(dlg, tr("reports.title"), str(e))
+                return
+
+            from app.auth.reports_service import save_report
+            result = save_report(user.id, title.strip(), str(pdf_path))
+            if isinstance(result, str):
+                QMessageBox.critical(dlg, tr("reports.title"), tr("reports.error_save"))
+                return
+
+            QMessageBox.information(dlg, tr("reports.saved"), tr("reports.saved_msg"))
+
+        btn_save_reports.clicked.connect(on_save_to_reports)
+        btn_layout.addWidget(btn_save_reports)
+
         l.addLayout(btn_layout)
         
         dlg.show()

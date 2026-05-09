@@ -63,6 +63,7 @@ class MainWindow(QMainWindow):
         self._distance_dialog = None
         self._measurements_dialog = None
         self._classification_history_dialog = None
+        self._reports_dialog = None
 
         # Setup UI
         self._setup_window()
@@ -277,6 +278,13 @@ class MainWindow(QMainWindow):
         act_multi = QAction(tr("action.multitemporal"), self)
         act_multi.triggered.connect(self._show_multitemporal_dialog)
         menu_analysis.addAction(act_multi)
+
+        menu_analysis.addSeparator()
+
+        act_reports = QAction(tr("action.my_reports"), self)
+        act_reports.setShortcut(QKeySequence("Ctrl+Shift+R"))
+        act_reports.triggered.connect(self._show_reports_dialog)
+        menu_analysis.addAction(act_reports)
 
         # --- Tools ---
         menu_tools = menubar.addMenu(tr("menu.tools"))
@@ -704,6 +712,15 @@ class MainWindow(QMainWindow):
 
     def _show_multitemporal_dialog(self):
         self._show_analysis_dialog("multitemporal")
+
+    def _show_reports_dialog(self):
+        if not self._current_user:
+            QMessageBox.information(self, tr("dialog.info"), tr("reports.no_user"))
+            return
+        if not hasattr(self, "_reports_dialog") or self._reports_dialog is None:
+            from app.ui.dialogs.reports_dialog import ReportsDialog
+            self._reports_dialog = ReportsDialog(self._current_user, self)
+        self._reports_dialog.show_and_raise()
 
     def _show_reproject_dialog(self):
         from app.ui.dialogs.crs_dialog import CRSDialog
