@@ -321,6 +321,15 @@ class MainWindow(QMainWindow):
 
         # --- Help ---
         menu_help = menubar.addMenu(tr("menu.help"))
+
+        act_tutorial = QAction(tr("action.tutorial"), self)
+        act_tutorial.setMenuRole(QAction.MenuRole.NoRole)
+        act_tutorial.setShortcut(QKeySequence("F1"))
+        act_tutorial.triggered.connect(self._show_tutorial)
+        menu_help.addAction(act_tutorial)
+
+        menu_help.addSeparator()
+
         act_about_help = QAction(tr("dialog.about_title"), self)
         act_about_help.setMenuRole(QAction.MenuRole.NoRole)
         act_about_help.triggered.connect(self._show_about)
@@ -1193,6 +1202,11 @@ class MainWindow(QMainWindow):
         dlg.exec()
 
     # --- About ---
+    def _show_tutorial(self):
+        from app.ui.dialogs.tutorial_dialog import TutorialDialog
+        dlg = TutorialDialog(self)
+        dlg.exec()
+
     def _show_about(self):
         from app.ui.dialogs.about_dialog import AboutDialog
         dlg = AboutDialog(self)

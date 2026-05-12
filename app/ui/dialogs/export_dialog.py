@@ -20,7 +20,6 @@ from app.processing.exporters import (
 )
 from app.i18n import tr
 from app.logger import get_logger
-from app.log import log
 from app.ui.widgets import LoadingOverlay
 from app.processing.workers import ProcessingWorker
 

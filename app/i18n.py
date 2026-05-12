@@ -116,6 +116,12 @@ _TRANSLATIONS = {
     "dialog.ok": {"es": "Aceptar", "en": "OK"},
     "dialog.apply": {"es": "Aplicar", "en": "Apply"},
     "dialog.close": {"es": "Cerrar", "en": "Close"},
+    "dialog.tutorial_title": {"es": "Tutorial — Guía de usuario", "en": "Tutorial — User Guide"},
+    "dialog.tutorial_search": {"es": "Buscar en el tutorial...", "en": "Search tutorial..."},
+    "dialog.tutorial_prev": {"es": "Resultado anterior (Shift+F3)", "en": "Previous match (Shift+F3)"},
+    "dialog.tutorial_next": {"es": "Resultado siguiente (F3)", "en": "Next match (F3)"},
+    "dialog.tutorial_no_match": {"es": "Sin resultados", "en": "No matches"},
+    "action.tutorial": {"es": "Tutorial / Guía de usuario", "en": "Tutorial / User Guide"},
     "dialog.about_title": {"es": "Acerca de ALAS", "en": "About ALAS"},
     "dialog.about_text": {
         "es": "ALAS — Aerial LiDAR Analysis Software\nAnálisis completo de nubes de puntos LiDAR.",
