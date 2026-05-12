@@ -10,7 +10,12 @@ from pathlib import Path
 from typing import Optional
 from datetime import datetime
 
+import keyring
+
 from app.config import USER_CONFIG_DIR, USER_CONFIG_FILE
+
+_KEYRING_SERVICE = "ALAS"
+_KEYRING_USERNAME = "session_token"
 
 
 @dataclass
@@ -126,7 +131,6 @@ class UserPreferences:
             "recent_files": [],
             "window_geometry": None,
             "window_state": None,
-            "session_token": None,
         }
         self._load()
 
@@ -135,6 +139,7 @@ class UserPreferences:
             try:
                 with open(USER_CONFIG_FILE, "r", encoding="utf-8") as f:
                     saved = json.load(f)
+                saved.pop("session_token", None)  # migrate: token moved to keyring
                 self._prefs.update(saved)
             except (json.JSONDecodeError, OSError):
                 pass
@@ -145,9 +150,20 @@ class UserPreferences:
             json.dump(self._prefs, f, indent=2, ensure_ascii=False)
 
     def get(self, key: str, default=None):
+        if key == "session_token":
+            return keyring.get_password(_KEYRING_SERVICE, _KEYRING_USERNAME) or default
         return self._prefs.get(key, default)
 
     def set(self, key: str, value):
+        if key == "session_token":
+            if value:
+                keyring.set_password(_KEYRING_SERVICE, _KEYRING_USERNAME, value)
+            else:
+                try:
+                    keyring.delete_password(_KEYRING_SERVICE, _KEYRING_USERNAME)
+                except keyring.errors.PasswordDeleteError:
+                    pass
+            return
         self._prefs[key] = value
         self.save()
 

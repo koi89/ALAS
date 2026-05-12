@@ -43,3 +43,4 @@ dependencies:
       - psycopg2-binary
       - bcrypt
       - python-dotenv
+      - keyring

@@ -140,7 +140,7 @@ class AnalysisResultsWindow(QMainWindow):
         pixmap = pixmap.scaledToWidth(800, Qt.TransformationMode.SmoothTransformation)
         return rgba, qimage, pixmap
 
-    def _get_legend_text(self, layer_type: str, raster_layer=None) -> str:
+    def _get_legend_text(self) -> str:
         """Return an HTML legend string. Override in each subclass."""
         return "No legend information available."
 

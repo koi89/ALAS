@@ -37,7 +37,7 @@ class GeomorphologyResultsWindow(AnalysisResultsWindow):
         pixmap = pixmap.scaledToWidth(800, Qt.TransformationMode.SmoothTransformation)
         return rgba, qimage, pixmap
 
-    def _get_legend_text(self, layer_type: str, raster_layer=None) -> str:
+    def _get_legend_text(self, layer_type: str) -> str:
         sq = "font-size: 15px;"
         legends = {
             "slope": (

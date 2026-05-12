@@ -7,13 +7,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, QThreadPool
+from PyQt6.QtCore import Qt, QThreadPool, QTimer
 from PyQt6.QtGui import QColor, QFont, QTextCharFormat, QTextCursor
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QGroupBox, QFormLayout,
     QListWidget, QListWidgetItem, QPushButton, QLabel, QFileDialog,
     QMessageBox, QCheckBox, QComboBox, QDoubleSpinBox, QTabWidget,
-    QWidget, QPlainTextEdit, QLineEdit, QAbstractItemView,
+    QWidget, QProgressBar, QPlainTextEdit, QLineEdit, QAbstractItemView,
 )
 
 
@@ -305,9 +305,12 @@ class BatchProcessingDialog(QDialog):
     C_YELLOW   = "#e5c07b"
     C_BLUE     = "#61afef"
     C_MAGENTA  = "#c678dd"
+    C_WHITE    = "#ffffff"
 
-    BAR_WIDTH  = 24
-    SPINNER    = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+    BAR_WIDTH   = 26
+    PULSE_WIDTH = 7
+    PULSE_MS    = 60
+    SPINNER     = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 
     def _build_progress_tab(self) -> QWidget:
         w = QWidget()
@@ -338,24 +341,40 @@ class BatchProcessingDialog(QDialog):
         )
         vl.addWidget(self._term, stretch=1)
 
-        # ── status line (a label, drawn as ASCII status bar) ─────────
-        self._status_line = QLabel()
-        self._status_line.setFont(mono)
-        self._status_line.setTextFormat(Qt.TextFormat.RichText)
-        self._status_line.setStyleSheet(
-            f"background:{self.C_BG_DIM};"
-            f"color:{self.C_FG};"
-            f"border-top:1px solid {self.C_BORDER};"
-            "padding:8px 14px;"
+        # ── overall progress bar ─────────────────────────────────────
+        self._overall_bar = QProgressBar()
+        self._overall_bar.setRange(0, 1)
+        self._overall_bar.setValue(0)
+        self._overall_bar.setFixedHeight(22)
+        self._overall_bar.setTextVisible(True)
+        self._overall_bar.setFormat("%p%")
+        self._overall_bar.setFont(mono)
+        self._overall_bar.setStyleSheet(
+            "QProgressBar {"
+            f"  background:{self.C_BG_DIM};"
+            f"  color:{self.C_FG};"
+            f"  border-top:1px solid {self.C_BORDER};"
+            "  border-left:none; border-right:none; border-bottom:none;"
+            "  text-align:center;"
+            "}"
+            f"QProgressBar::chunk {{ background:{self.C_GREEN}; }}"
         )
-        vl.addWidget(self._status_line)
+        vl.addWidget(self._overall_bar)
 
         # Per-run state
-        self._total_files: int = 0
-        self._done_count:  int = 0
-        self._spin_idx:   int = 0
-        self._file_t0:    float = 0.0
-        self._batch_t0:   float = 0.0
+        self._total_files:    int   = 0
+        self._done_count:     int   = 0
+        self._spin_idx:       int   = 0
+        self._file_t0:        float = 0.0
+        self._batch_t0:       float = 0.0
+        self._step_block:     int   = -1
+        self._current_step:   str   = ""
+        self._pulse_pos:      int   = 0
+        self._pulse_dir:      int   = 1
+
+        self._pulse_timer = QTimer(self)
+        self._pulse_timer.setInterval(self.PULSE_MS)
+        self._pulse_timer.timeout.connect(self._on_pulse_tick)
 
         self._update_status(0, 0, "idle")
         return w
@@ -374,41 +393,61 @@ class BatchProcessingDialog(QDialog):
         self._term.ensureCursorVisible()
         return self._term.document().blockCount() - 2
 
-    def _ascii_bar(self, pct: int, width: int | None = None) -> str:
-        width = width or self.BAR_WIDTH
-        pct = max(0, min(100, pct))
-        filled = int(width * pct / 100)
-        return "█" * filled + "░" * (width - filled)
+    def _pulse_bar(self) -> str:
+        pos   = self._pulse_pos
+        trail = self.PULSE_WIDTH
+        empty = self.BAR_WIDTH - trail
+        bar   = " " * pos + "█" * trail + " " * (empty - pos)
+        return f"[{bar}]"
 
-    def _spinner_char(self) -> str:
-        ch = self.SPINNER[self._spin_idx % len(self.SPINNER)]
+    def _replace_block(self, block_no: int, text: str, color: str):
+        block = self._term.document().findBlockByNumber(block_no)
+        if not block.isValid():
+            return
+        fmt = QTextCharFormat()
+        fmt.setForeground(QColor(color))
+        c = QTextCursor(block)
+        c.movePosition(QTextCursor.MoveOperation.StartOfBlock)
+        c.movePosition(QTextCursor.MoveOperation.EndOfBlock,
+                       QTextCursor.MoveMode.KeepAnchor)
+        c.insertText(text, fmt)
+
+    def _on_pulse_tick(self):
+        max_pos = self.BAR_WIDTH - self.PULSE_WIDTH
+        self._pulse_pos += self._pulse_dir
+        if self._pulse_pos >= max_pos:
+            self._pulse_pos = max_pos
+            self._pulse_dir = -1
+        elif self._pulse_pos <= 0:
+            self._pulse_pos = 0
+            self._pulse_dir = 1
+
         self._spin_idx += 1
-        return ch
+        if self._step_block < 0:
+            return
+        spin = self.SPINNER[self._spin_idx % len(self.SPINNER)]
+        step = self._current_step
+        bar  = self._pulse_bar()
+        self._replace_block(
+            self._step_block,
+            f"      {spin}  {step:<22.22s} {bar}",
+            self.C_FG,
+        )
+        self._term.ensureCursorVisible()
 
     def _update_status(self, done: int, total: int, state: str):
-        """Render the bottom status bar (rich text in QLabel)."""
-        pct  = int(done / total * 100) if total else 0
-        bar  = self._ascii_bar(pct, 32)
-        sep  = f"<span style='color:{self.C_DIMMER}'>│</span>"
-        bar_color = self.C_GREEN if (total and done == total) else self.C_CYAN
-        files_txt = (
-            f"<span style='color:{self.C_DIM}'>files</span> "
-            f"<span style='color:{self.C_FG}'>{done}/{total}</span>"
-        )
-        bar_txt = (
-            f"<span style='color:{bar_color}'>{bar}</span> "
-            f"<span style='color:{self.C_FG}'>{pct:3d}%</span>"
-        )
-        state_color = {
-            "idle":     self.C_DIM,
-            "running":  self.C_BLUE,
-            "done":     self.C_GREEN,
-            "errors":   self.C_YELLOW,
-        }.get(state, self.C_DIM)
-        state_txt = f"<span style='color:{state_color}'>● {state}</span>"
-        self._status_line.setText(
-            f"&nbsp;{files_txt}&nbsp;&nbsp;{sep}&nbsp;&nbsp;{bar_txt}"
-            f"&nbsp;&nbsp;{sep}&nbsp;&nbsp;{state_txt}"
+        self._overall_bar.setMaximum(max(total, 1))
+        self._overall_bar.setValue(done)
+        chunk_color = self.C_GREEN if (total and done == total) else self.C_CYAN
+        self._overall_bar.setStyleSheet(
+            "QProgressBar {"
+            f"  background:{self.C_BG_DIM};"
+            f"  color:{self.C_FG};"
+            f"  border-top:1px solid {self.C_BORDER};"
+            "  border-left:none; border-right:none; border-bottom:none;"
+            "  text-align:center;"
+            "}"
+            f"QProgressBar::chunk {{ background:{chunk_color}; }}"
         )
 
     # ------------------------------------------------------------------
@@ -452,7 +491,7 @@ class BatchProcessingDialog(QDialog):
         if folder:
             self._out_dir_edit.setText(folder)
 
-    def _on_clf_algo_changed(self, _idx: int):
+    def _on_clf_algo_changed(self, _: int):
         algo = self._clf_algo.currentData()
         smrf_widgets = [self._clf_smrf_window, self._clf_smrf_slope, self._clf_smrf_threshold]
         csf_pairs = [self._clf_csf_res_row, self._clf_csf_thr_row]
@@ -473,7 +512,6 @@ class BatchProcessingDialog(QDialog):
         self.reject()
 
     def _on_run(self):
-        # Validate
         if self._file_list.count() == 0:
             QMessageBox.warning(self, tr("batch.title"), tr("batch.no_files"))
             return
@@ -516,47 +554,65 @@ class BatchProcessingDialog(QDialog):
 
     def _prepare_progress_table(self, files: list[Path]):
         import datetime, time
-        self._total_files = len(files)
-        self._done_count  = 0
-        self._spin_idx    = 0
-        self._batch_t0    = time.time()
+        self._total_files  = len(files)
+        self._done_count   = 0
+        self._spin_idx     = 0
+        self._step_block   = -1
+        self._current_step = ""
+        self._pulse_pos    = 0
+        self._pulse_dir    = 1
+        self._batch_t0     = time.time()
 
         self._term.clear()
-
         ts = datetime.datetime.now().strftime("%H:%M:%S")
-        # Header banner
         self._emit("",                                                   self.C_DIM)
         self._emit("  ╭─────────────────────────────────────────────╮",  self.C_BORDER)
         self._emit(f"  │  alas-batch  ·  {len(files):>3} files  ·  {ts}     │",
                                                                          self.C_FG)
         self._emit("  ╰─────────────────────────────────────────────╯",  self.C_BORDER)
         self._emit("",                                                   self.C_DIM)
-
         self._update_status(0, len(files), "running")
 
     def _on_file_started(self, idx: int, name: str):
         import time
-        self._file_t0 = time.time()
+        self._file_t0      = time.time()
+        self._current_step = "starting"
+        self._pulse_pos    = 0
+        self._pulse_dir    = 1
         n = idx + 1
         self._emit(f"  ▸ [{n}/{self._total_files}]  {name}", self.C_CYAN)
+        # Reserve the one animated line for this file
+        self._step_block = self._emit(
+            f"      ⠋  {'starting':<22.22s} [{' ' * self.BAR_WIDTH}]", self.C_FG
+        )
+        self._pulse_timer.start()
 
-    def _on_file_progress(self, _idx: int, pct: int, msg: str):
-        msg_clean = msg.rstrip("…").rstrip(".").lower()
-        spin      = self._spinner_char()
-        bar       = self._ascii_bar(pct)
-        line      = f"      {spin}  {msg_clean:<22.22s} [{bar}] {pct:3d}%"
-        self._emit(line, self.C_FG)
+    def _on_file_progress(self, _idx: int, _pct: int, msg: str):
+        self._current_step = msg.rstrip("…").rstrip(".").lower()
 
     def _on_file_done(self, _idx: int, success: bool, message: str):
         import time
+        self._pulse_timer.stop()
         elapsed = time.time() - self._file_t0
-        if success:
-            bar  = self._ascii_bar(100)
-            self._emit(f"      ✓  {'done':<22.22s} [{bar}] 100%", self.C_GREEN)
-            self._emit(f"        └─ ok in {elapsed:.1f}s", self.C_DIMMER)
-        else:
-            self._emit(f"      ✗  {message[:60]}", self.C_RED)
-            self._emit(f"        └─ failed after {elapsed:.1f}s", self.C_DIMMER)
+
+        if self._step_block >= 0:
+            if success:
+                done_bar = "█" * self.BAR_WIDTH
+                self._replace_block(
+                    self._step_block,
+                    f"      ✓  {'done':<22.22s} [{done_bar}]",
+                    self.C_GREEN,
+                )
+            else:
+                self._replace_block(
+                    self._step_block,
+                    f"      ✗  {message[:self.BAR_WIDTH + 26]}",
+                    self.C_RED,
+                )
+            self._step_block = -1
+
+        label = f"ok in {elapsed:.1f}s" if success else f"failed after {elapsed:.1f}s"
+        self._emit(f"        └─ {label}", self.C_DIMMER)
         self._emit("", self.C_DIM)
 
         self._done_count += 1
