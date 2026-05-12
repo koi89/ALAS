@@ -260,6 +260,13 @@ class MainWindow(QMainWindow):
         act_overlap.triggered.connect(self._remove_overlap)
         menu_proc.addAction(act_overlap)
 
+        menu_proc.addSeparator()
+
+        act_batch = QAction(tr("action.batch"), self)
+        act_batch.setShortcut(QKeySequence("Ctrl+B"))
+        act_batch.triggered.connect(self._show_batch_dialog)
+        menu_proc.addAction(act_batch)
+
         # --- Analysis ---
         menu_analysis = menubar.addMenu(tr("menu.analysis"))
 
@@ -314,6 +321,15 @@ class MainWindow(QMainWindow):
 
         # --- Help ---
         menu_help = menubar.addMenu(tr("menu.help"))
+
+        act_tutorial = QAction(tr("action.tutorial"), self)
+        act_tutorial.setMenuRole(QAction.MenuRole.NoRole)
+        act_tutorial.setShortcut(QKeySequence("F1"))
+        act_tutorial.triggered.connect(self._show_tutorial)
+        menu_help.addAction(act_tutorial)
+
+        menu_help.addSeparator()
+
         act_about_help = QAction(tr("dialog.about_title"), self)
         act_about_help.setMenuRole(QAction.MenuRole.NoRole)
         act_about_help.triggered.connect(self._show_about)
@@ -442,11 +458,19 @@ class MainWindow(QMainWindow):
     def _on_layer_added(self, index: int):
         self._update_points_display()
         entry = self.layer_manager.get_entry(index)
-        if entry:
-            if entry.is_point_cloud:
-                self.viewport.display_point_cloud(entry.layer, name=entry.name)
-            elif entry.is_raster:
-                self.viewport.display_raster_surface(entry.layer, name=entry.name)
+        if not entry:
+            return
+        if entry.is_point_cloud:
+            colorize_by = self.viewport._colorize_mode
+            name = entry.name
+            layer = entry.layer
+            self._run_processing(
+                Viewport3D.prepare_display_data,
+                layer, colorize_by,
+                on_result=lambda cloud: self.viewport.render_prepared_cloud(cloud, name),
+            )
+        elif entry.is_raster:
+            self.viewport.display_raster_surface(entry.layer, name=entry.name)
 
     # ==================================================================
     # File operations
@@ -644,6 +668,11 @@ class MainWindow(QMainWindow):
     # Processing actions (stubs — implemented in dialogs)
     # ==================================================================
 
+    def _show_batch_dialog(self):
+        from app.ui.dialogs.batch_dialog import BatchProcessingDialog
+        dlg = BatchProcessingDialog(self)
+        dlg.exec()
+
     def _show_classification_dialog(self):
         from app.ui.dialogs.classification_dialog import ClassificationDialog
         entry = self.layer_manager.active_layer
@@ -655,6 +684,7 @@ class MainWindow(QMainWindow):
             result = dlg.get_result()
             if result is not None:
                 entry.layer.classification = result
+                entry.layer._hag_cache = None
                 self.viewport.update_colorization(entry.layer, "classification")
                 self._update_status(tr("success.classification_done"))
                 
@@ -691,7 +721,7 @@ class MainWindow(QMainWindow):
 
     def _show_analysis_dialog(self, tab_name: str):
         if not hasattr(self, "_analysis_dialog") or self._analysis_dialog is None:
-            from app.ui.dialogs.analysis_dialog import AnalysisDialog
+            from app.ui.dialogs.analysis.analysis_dialog import AnalysisDialog
             self._analysis_dialog = AnalysisDialog(tab_name, self.layer_manager, self)
             self._analysis_dialog.setWindowFlags(Qt.WindowType.Window)
         else:
@@ -1172,6 +1202,11 @@ class MainWindow(QMainWindow):
         dlg.exec()
 
     # --- About ---
+    def _show_tutorial(self):
+        from app.ui.dialogs.tutorial_dialog import TutorialDialog
+        dlg = TutorialDialog(self)
+        dlg.exec()
+
     def _show_about(self):
         from app.ui.dialogs.about_dialog import AboutDialog
         dlg = AboutDialog(self)

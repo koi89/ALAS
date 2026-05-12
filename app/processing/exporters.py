@@ -137,11 +137,15 @@ def export_vector(geometries: list, attributes: list,
 
 def export_pdf_report(title: str, metadata: dict,
                        statistics: dict, screenshots: list,
-                       path: str, hydro_results: dict = None):
+                       path: str, analysis_results: dict = None,
+                       hydro_results: dict = None):
     """
     Generates a PDF report with statistics and screenshots.
-    hydro_results: dict with layer_type -> {'image': path, 'legend': text, 'stats': dict}
+    analysis_results: dict with layer_type -> {'image': path, 'legend': text, 'stats': dict}
+    hydro_results: legacy alias for analysis_results.
     """
+    if analysis_results is None and hydro_results is not None:
+        analysis_results = hydro_results
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.units import cm
     from reportlab.platypus import (
@@ -216,8 +220,8 @@ def export_pdf_report(title: str, metadata: dict,
         elements.append(stats_table)
         elements.append(Spacer(1, 20))
 
-    # Hydrology results with images and legends
-    if hydro_results:
+    # Analysis results with images and legends
+    if analysis_results:
         from reportlab.graphics.shapes import Drawing, Rect
         from reportlab.platypus import KeepTogether
         
@@ -265,6 +269,85 @@ def export_pdf_report(title: str, metadata: dict,
                     ("#2196f3", "Moderate (0.5-2 m)"),
                     ("#1565c0", "Deep (2-5 m)"),
                     ("#000033", "Very deep (> 5 m)")
+                ],
+                "slope": [
+                    ("#ffffcc", "Flat (0–5°)"),
+                    ("#fd8d3c", "Moderate (5–20°)"),
+                    ("#e31a1c", "Steep (20–45°)"),
+                    ("#800026", "Very steep (>45°)")
+                ],
+                "aspect": [
+                    ("#1f77b4", "North (0°/360°)"),
+                    ("#ff7f0e", "East (90°)"),
+                    ("#2ca02c", "South (180°)"),
+                    ("#d62728", "West (270°)")
+                ],
+                "curvature": [
+                    ("#d62728", "Concave (<0)"),
+                    ("#f5f5f5", "Flat (≈0)"),
+                    ("#1f77b4", "Convex (>0)")
+                ],
+                "hillshade": [
+                    ("#000000", "Shadow (0)"),
+                    ("#ffffff", "Lit (255)")
+                ],
+                "landform": [
+                    ("#1f77b4", "Valley"),
+                    ("#aec7e8", "Footslope"),
+                    ("#ffbb78", "Backslope"),
+                    ("#d62728", "Summit")
+                ],
+                "roughness": [
+                    ("#f7fcf5", "Low"),
+                    ("#41ab5d", "Medium"),
+                    ("#00441b", "High")
+                ],
+                "tree_tops": [
+                    ("#ff0000", "High canopy"),
+                    ("#ffff00", "Medium canopy"),
+                    ("#00cc00", "Low canopy")
+                ],
+                "density": [
+                    ("#f7fcf5", "Low"),
+                    ("#74c476", "Medium"),
+                    ("#00441b", "High")
+                ],
+                "volume_difference": [
+                    ("#d62728", "Erosion (<0 m)"),
+                    ("#f5f5f5", "Stable (≈0 m)"),
+                    ("#1f77b4", "Deposition (>0 m)")
+                ],
+                "significant_changes": [
+                    ("#d62728", "Significant erosion"),
+                    ("#cccccc", "Stable"),
+                    ("#1f77b4", "Significant deposition")
+                ],
+                "vegetation_change": [
+                    ("#d62728", "Deforested"),
+                    ("#2ca02c", "Forest gain"),
+                    ("#cccccc", "No change")
+                ],
+                "crown_raster": [
+                    ("#1f77b4", "Crown ID 1, 21, 41…"),
+                    ("#aec7e8", "Crown ID 2, 22, 42…"),
+                    ("#ff7f0e", "Crown ID 3, 23, 43…"),
+                    ("#ffbb78", "Crown ID 4, 24, 44…"),
+                    ("#2ca02c", "Crown ID 5, 25, 45…"),
+                    ("#98df8a", "Crown ID 6, 26, 46…"),
+                    ("#d62728", "Crown ID 7, 27, 47…"),
+                    ("#ff9896", "Crown ID 8, 28, 48…"),
+                    ("#9467bd", "Crown ID 9, 29, 49…"),
+                    ("#c5b0d5", "Crown ID 10, 30, 50…"),
+                    ("#8c564b", "Crown ID 11, 31, 51…"),
+                    ("#c49c94", "Crown ID 12, 32, 52…"),
+                    ("#e377c2", "Crown ID 13, 33, 53…"),
+                    ("#f7b6d2", "Crown ID 14, 34, 54…"),
+                    ("#7f7f7f", "Crown ID 15, 35, 55…"),
+                    ("#c7c7c7", "Crown ID 16, 36, 56…"),
+                    ("#bcbd22", "Crown ID 17, 37, 57…"),
+                    ("#dbdb8d", "Crown ID 18, 38, 58…"),
+                    ("#17becf", "Crown ID 19, 39, 59…"),
+                    ("#9edae5", "Crown ID 20, 40, 60… (then repeats)")
                 ]
             }
             
@@ -288,7 +371,7 @@ def export_pdf_report(title: str, metadata: dict,
             
             return legend_elements
         
-        for layer_type, result_data in hydro_results.items():
+        for layer_type, result_data in analysis_results.items():
             elements.append(PageBreak())
             
             # Layer title
