@@ -1,7 +1,6 @@
 """
-ALAS — Tutorial Dialog
-Interactive help viewer that renders TUTORIAL.md with a navigable
-section sidebar and full-text search.
+ALAS — Help Dialogs
+Markdown viewer used for Tutorial, Keyboard Shortcuts, and Glossary.
 """
 
 import re
@@ -14,37 +13,47 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QKeySequence, QShortcut, QTextCursor, QTextCharFormat, QColor, QTextDocument
 
-from app.config import ROOT_DIR
-from app.i18n import tr
+from app.config import RESOURCES_DIR
+from app.i18n import tr, get_language
 
 
-def _read_tutorial() -> str:
-    path = ROOT_DIR / "TUTORIAL.md"
+def _read_doc(folder: str, prefix: str) -> str:
+    lang = get_language()
+    suffix = "ES" if lang == "es" else "EN"
+    path = RESOURCES_DIR / "docs" / folder / f"{prefix}_{suffix}.md"
     try:
         return path.read_text(encoding="utf-8")
     except Exception:
-        return "# Tutorial\n\nNo se encontró el archivo TUTORIAL.md."
+        fallback = RESOURCES_DIR / "docs" / folder / f"{prefix}_EN.md"
+        try:
+            return fallback.read_text(encoding="utf-8")
+        except Exception:
+            return f"# {prefix}\n\nFile not found."
 
 
 def _extract_sections(md: str) -> list[tuple[str, str]]:
-    """Return list of (display_label, anchor_text) for every heading."""
     sections = []
     for line in md.splitlines():
         m = re.match(r"^(#{1,3})\s+(.+)", line)
         if m:
             level = len(m.group(1))
             title = m.group(2).strip()
-            # strip markdown link syntax if present
             title = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", title)
             indent = "  " * (level - 1)
             sections.append((f"{indent}{title}", title))
     return sections
 
 
-class TutorialDialog(QDialog):
-    def __init__(self, parent=None):
+# ---------------------------------------------------------------------------
+# Base viewer dialog
+# ---------------------------------------------------------------------------
+
+class _HelpDialog(QDialog):
+    """Generic markdown help viewer with sidebar and full-text search."""
+
+    def __init__(self, title: str, md: str, search_placeholder: str, parent=None):
         super().__init__(parent)
-        self.setWindowTitle(tr("dialog.tutorial_title"))
+        self.setWindowTitle(title)
         self.setMinimumSize(900, 640)
         self.resize(1020, 720)
         self.setWindowFlags(
@@ -53,19 +62,21 @@ class TutorialDialog(QDialog):
             Qt.WindowType.WindowCloseButtonHint |
             Qt.WindowType.WindowMaximizeButtonHint
         )
-        self._md = _read_tutorial()
-        self._sections = _extract_sections(self._md)
+        self._md = md
+        self._sections = _extract_sections(md)
+        self._matches: list[QTextCursor] = []
+        self._match_index = -1
         self._search_timer = QTimer(self)
         self._search_timer.setSingleShot(True)
         self._search_timer.timeout.connect(self._do_search)
-        self._build_ui()
+        self._build_ui(title, search_placeholder)
         self._populate_sections()
 
     # ------------------------------------------------------------------
     # UI
     # ------------------------------------------------------------------
 
-    def _build_ui(self):
+    def _build_ui(self, title: str, search_placeholder: str):
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
@@ -78,16 +89,16 @@ class TutorialDialog(QDialog):
         top_layout.setContentsMargins(16, 8, 16, 8)
         top_layout.setSpacing(12)
 
-        lbl = QLabel(tr("dialog.tutorial_title"))
+        lbl = QLabel(title)
         lbl.setObjectName("tutorialHeadingLabel")
         top_layout.addWidget(lbl)
         top_layout.addStretch()
 
         self._search_box = QLineEdit()
-        self._search_box.setPlaceholderText(tr("dialog.tutorial_search"))
+        self._search_box.setPlaceholderText(search_placeholder)
         self._search_box.setFixedWidth(240)
         self._search_box.setObjectName("tutorialSearchBox")
-        self._search_box.textChanged.connect(self._on_search_changed)
+        self._search_box.textChanged.connect(lambda _: self._on_search_changed())
         self._search_box.returnPressed.connect(self._jump_next_match)
         top_layout.addWidget(self._search_box)
 
@@ -112,7 +123,6 @@ class TutorialDialog(QDialog):
 
         root.addWidget(top_bar)
 
-        # ── Divider ─────────────────────────────────────────────────────
         line = QFrame()
         line.setFrameShape(QFrame.Shape.HLine)
         line.setObjectName("tutorialDivider")
@@ -123,14 +133,12 @@ class TutorialDialog(QDialog):
         splitter.setHandleWidth(1)
         splitter.setObjectName("tutorialSplitter")
 
-        # Sidebar
         self._section_list = QListWidget()
         self._section_list.setObjectName("tutorialSidebar")
         self._section_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._section_list.currentRowChanged.connect(self._on_section_selected)
         splitter.addWidget(self._section_list)
 
-        # Content browser
         self._browser = QTextBrowser()
         self._browser.setObjectName("tutorialBrowser")
         self._browser.setOpenExternalLinks(True)
@@ -158,9 +166,7 @@ class TutorialDialog(QDialog):
 
         root.addWidget(bottom_bar)
 
-        # Esc closes
         QShortcut(QKeySequence("Escape"), self, self.accept)
-        # F3 jumps to next match
         QShortcut(QKeySequence("F3"), self, self._jump_next_match)
         QShortcut(QKeySequence("Shift+F3"), self, self._jump_prev_match)
 
@@ -253,10 +259,8 @@ class TutorialDialog(QDialog):
     def _populate_sections(self):
         for label, _ in self._sections:
             item = QListWidgetItem(label)
-            # top-level headings get a slightly different style via font weight
             stripped = label.lstrip()
-            depth = len(label) - len(stripped)
-            if depth == 0:
+            if len(label) == len(stripped):
                 font = item.font()
                 font.setBold(True)
                 item.setFont(font)
@@ -266,7 +270,6 @@ class TutorialDialog(QDialog):
         if row < 0 or row >= len(self._sections):
             return
         _, heading_text = self._sections[row]
-        # Find the heading in the document and scroll to it
         doc = self._browser.document()
         cursor = doc.find(heading_text)
         if not cursor.isNull():
@@ -277,7 +280,7 @@ class TutorialDialog(QDialog):
     # Search
     # ------------------------------------------------------------------
 
-    def _on_search_changed(self, text: str):
+    def _on_search_changed(self):
         self._search_timer.start(250)
 
     def _do_search(self):
@@ -287,7 +290,7 @@ class TutorialDialog(QDialog):
             self._match_label.setText("")
             return
 
-        self._matches: list[QTextCursor] = []
+        self._matches = []
         self._match_index = -1
 
         doc = self._browser.document()
@@ -325,30 +328,61 @@ class TutorialDialog(QDialog):
         if not self._matches:
             return
         cursor = self._matches[index]
-        # highlight current match differently
         active_fmt = QTextCharFormat()
         active_fmt.setBackground(QColor("#888800"))
         active_fmt.setForeground(QColor("#ffffff"))
-        prev_fmt = QTextCharFormat()
-        prev_fmt.setBackground(QColor("#7a6a00"))
-        prev_fmt.setForeground(QColor("#ffffff"))
-
+        dim_fmt = QTextCharFormat()
+        dim_fmt.setBackground(QColor("#7a6a00"))
+        dim_fmt.setForeground(QColor("#ffffff"))
         for i, c in enumerate(self._matches):
-            c.mergeCharFormat(active_fmt if i == index else prev_fmt)
-
+            c.mergeCharFormat(active_fmt if i == index else dim_fmt)
         self._browser.setTextCursor(cursor)
         self._browser.ensureCursorVisible()
 
     def _jump_next_match(self):
-        if not getattr(self, "_matches", []):
+        if not self._matches:
             return
         self._match_index = (self._match_index + 1) % len(self._matches)
         self._scroll_to_match(self._match_index)
         self._match_label.setText(f"{self._match_index + 1} / {len(self._matches)}")
 
     def _jump_prev_match(self):
-        if not getattr(self, "_matches", []):
+        if not self._matches:
             return
         self._match_index = (self._match_index - 1) % len(self._matches)
         self._scroll_to_match(self._match_index)
         self._match_label.setText(f"{self._match_index + 1} / {len(self._matches)}")
+
+
+# ---------------------------------------------------------------------------
+# Concrete dialogs
+# ---------------------------------------------------------------------------
+
+class TutorialDialog(_HelpDialog):
+    def __init__(self, parent=None):
+        super().__init__(
+            title=tr("dialog.tutorial_title"),
+            md=_read_doc("tutorials", "TUTORIAL"),
+            search_placeholder=tr("dialog.tutorial_search"),
+            parent=parent,
+        )
+
+
+class ShortcutsDialog(_HelpDialog):
+    def __init__(self, parent=None):
+        super().__init__(
+            title=tr("dialog.shortcuts_title"),
+            md=_read_doc("shortcuts", "SHORTCUTS"),
+            search_placeholder=tr("dialog.shortcuts_search"),
+            parent=parent,
+        )
+
+
+class GlossaryDialog(_HelpDialog):
+    def __init__(self, parent=None):
+        super().__init__(
+            title=tr("dialog.glossary_title"),
+            md=_read_doc("glossary", "GLOSSARY"),
+            search_placeholder=tr("dialog.glossary_search"),
+            parent=parent,
+        )

@@ -328,6 +328,16 @@ class MainWindow(QMainWindow):
         act_tutorial.triggered.connect(self._show_tutorial)
         menu_help.addAction(act_tutorial)
 
+        act_shortcuts = QAction(tr("action.shortcuts"), self)
+        act_shortcuts.setMenuRole(QAction.MenuRole.NoRole)
+        act_shortcuts.triggered.connect(self._show_shortcuts)
+        menu_help.addAction(act_shortcuts)
+
+        act_glossary = QAction(tr("action.glossary"), self)
+        act_glossary.setMenuRole(QAction.MenuRole.NoRole)
+        act_glossary.triggered.connect(self._show_glossary)
+        menu_help.addAction(act_glossary)
+
         menu_help.addSeparator()
 
         act_about_help = QAction(tr("dialog.about_title"), self)
@@ -1205,6 +1215,16 @@ class MainWindow(QMainWindow):
     def _show_tutorial(self):
         from app.ui.dialogs.tutorial_dialog import TutorialDialog
         dlg = TutorialDialog(self)
+        dlg.exec()
+
+    def _show_shortcuts(self):
+        from app.ui.dialogs.tutorial_dialog import ShortcutsDialog
+        dlg = ShortcutsDialog(self)
+        dlg.exec()
+
+    def _show_glossary(self):
+        from app.ui.dialogs.tutorial_dialog import GlossaryDialog
+        dlg = GlossaryDialog(self)
         dlg.exec()
 
     def _show_about(self):

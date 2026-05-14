@@ -121,6 +121,12 @@ _TRANSLATIONS = {
     "dialog.tutorial_prev": {"es": "Resultado anterior (Shift+F3)", "en": "Previous match (Shift+F3)"},
     "dialog.tutorial_next": {"es": "Resultado siguiente (F3)", "en": "Next match (F3)"},
     "dialog.tutorial_no_match": {"es": "Sin resultados", "en": "No matches"},
+    "dialog.shortcuts_title": {"es": "Atajos de teclado", "en": "Keyboard Shortcuts"},
+    "dialog.shortcuts_search": {"es": "Buscar atajo...", "en": "Search shortcuts..."},
+    "dialog.glossary_title": {"es": "Glosario", "en": "Glossary"},
+    "dialog.glossary_search": {"es": "Buscar término...", "en": "Search glossary..."},
+    "action.shortcuts": {"es": "Atajos de teclado", "en": "Keyboard Shortcuts"},
+    "action.glossary": {"es": "Glosario", "en": "Glossary"},
     "action.tutorial": {"es": "Tutorial / Guía de usuario", "en": "Tutorial / User Guide"},
     "dialog.about_title": {"es": "Acerca de ALAS", "en": "About ALAS"},
     "dialog.about_text": {
