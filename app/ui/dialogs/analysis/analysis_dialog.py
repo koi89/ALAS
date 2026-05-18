@@ -17,9 +17,10 @@ from .geomorphology import GeomorphologyTab
 from .hydrology import HydrologyTab
 from .vegetation import VegetationTab
 from .multitemporal import MultitemporalTab
+from .contours import ContoursTab
 
 
-_TAB_NAMES = ["geomorphology", "hydrology", "vegetation", "multitemporal"]
+_TAB_NAMES = ["geomorphology", "hydrology", "vegetation", "multitemporal", "contours"]
 _TAB_INDEX = {name: i for i, name in enumerate(_TAB_NAMES)}
 
 
@@ -67,6 +68,9 @@ class AnalysisDialog(QDialog):
         self._multi_tab = MultitemporalTab(self.layer_manager, main_window)
         self._tabs.addTab(self._multi_tab, tr("analysis.multitemporal"))
 
+        self._contours_tab = ContoursTab(self.layer_manager, main_window)
+        self._tabs.addTab(self._contours_tab, tr("contour.title"))
+
         self._tabs.setCurrentIndex(_TAB_INDEX.get(initial_tab, 0))
         layout.addWidget(self._tabs)
 
@@ -87,3 +91,4 @@ class AnalysisDialog(QDialog):
         self._hydro_tab.refresh_combos()
         self._veg_tab.refresh_combos()
         self._multi_tab.refresh_combos()
+        self._contours_tab.refresh_combos()

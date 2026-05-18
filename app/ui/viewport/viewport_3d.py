@@ -49,6 +49,9 @@ class Viewport3D(QWidget):
         self._figure_id_map: dict = {}   # actor_name → figure_id
         self._drag_observers_active = False
 
+        # Annotations
+        self._annotation_actors: dict = {}   # ann_id → (sphere_actor, label_actor)
+
         # Tools state
         self._picked_points = []
         self._measuring_widget = None
@@ -946,6 +949,117 @@ class Viewport3D(QWidget):
             self._measuring_widget = None
         self._picking_callback = None
         logger.info("Interactive tools disabled")
+
+    # ------------------------------------------------------------------
+    # 3D Annotations
+    # ------------------------------------------------------------------
+
+    def add_annotation(self, ann_id: int, point: tuple, text: str,
+                       color: str = "#00e5ff") -> None:
+        """Pin a text label at a 3D point in the viewport."""
+        ann_key = f"_ann_{ann_id}"
+
+        # Screen-space sphere marker (always visible regardless of zoom)
+        pts = pv.PolyData([list(point)])
+        sphere_actor = self.plotter.add_mesh(
+            pts, color=color,
+            point_size=16,
+            render_points_as_spheres=True,
+            name=f"{ann_key}_sphere",
+            reset_camera=False,
+        )
+
+        # 2D-overlay text label anchored to the 3D point
+        label_actor = self.plotter.add_point_labels(
+            [list(point)], [text],
+            name=f"{ann_key}_label",
+            always_visible=True,
+            reset_camera=False,
+            font_size=11,
+            text_color="white",
+            bold=True,
+            shape_opacity=0.55,
+            shape_color="#1a1a2e",
+            margin=3,
+        )
+
+        self._annotation_actors[ann_id] = (sphere_actor, label_actor)
+        self.plotter.render()
+        logger.debug(f"Annotation {ann_id} added at {point}")
+
+    def remove_annotation(self, ann_id: int) -> None:
+        """Remove an annotation by id."""
+        actors = self._annotation_actors.pop(ann_id, None)
+        if actors:
+            for a in actors:
+                try:
+                    self.plotter.remove_actor(a)
+                except Exception:
+                    pass
+        self.plotter.render()
+
+    def clear_annotations(self) -> None:
+        """Remove all annotations from the viewport."""
+        for ann_id in list(self._annotation_actors.keys()):
+            self.remove_annotation(ann_id)
+
+    # ------------------------------------------------------------------
+    # Contour Lines
+    # ------------------------------------------------------------------
+
+    def display_contours(self, contours: list, name: str = "_contours") -> None:
+        """
+        Render elevation contour lines.
+
+        Parameters
+        ----------
+        contours : list of {"elevation": float, "xy": ndarray (N, 2)}
+        name     : actor name used for later removal / replacement
+        """
+        self._remove_actor(name)
+
+        if not contours:
+            return
+
+        # Build a single PolyData with all polylines
+        all_pts: list[np.ndarray] = []
+        all_cells: list[np.ndarray] = []
+        all_elev: list[np.ndarray] = []
+        offset = 0
+
+        for c in contours:
+            xy = c["xy"]
+            elev = c["elevation"]
+            n = len(xy)
+            pts_3d = np.column_stack([xy, np.full(n, elev, dtype=np.float64)])
+            all_pts.append(pts_3d)
+            # Polyline cell descriptor: [n, i0, i1, ..., i_{n-1}]
+            cell = np.concatenate([[n], np.arange(offset, offset + n)])
+            all_cells.append(cell)
+            all_elev.append(np.full(n, elev, dtype=np.float64))
+            offset += n
+
+        pts_array = np.vstack(all_pts)
+        cells_flat = np.concatenate(all_cells).astype(np.int64)
+        elev_array = np.concatenate(all_elev)
+
+        pd = pv.PolyData()
+        pd.points = pts_array
+        pd.lines = cells_flat
+        pd["elevation"] = elev_array
+
+        actor = self.plotter.add_mesh(
+            pd,
+            scalars="elevation",
+            cmap="terrain",
+            line_width=1.5,
+            name=name,
+            reset_camera=False,
+            show_scalar_bar=False,
+        )
+        self._current_actors[name] = actor
+        self.plotter.render()
+        logger.info(f"Displayed {len(contours)} contour segments")
 
     # ------------------------------------------------------------------
     # Cleanup

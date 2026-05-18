@@ -68,6 +68,16 @@ class MainWindow(QMainWindow):
         self._figures_history_dialog = None
         self._figure_actor_names: dict[int, str] = {}
 
+        # Coordinate picker
+        self._coord_picker_dialog = None
+
+        # 3D Annotations
+        self._annotations_dialog = None
+        self._annotations_next_id: int = 0
+        self._annotation_entries: dict = {}     # ann_id → AnnotationEntry
+        self._pending_annotation_text: str = ""
+
+
         # Setup UI
         self._setup_window()
         self._setup_viewport()
@@ -294,6 +304,10 @@ class MainWindow(QMainWindow):
         act_multi.triggered.connect(self._show_multitemporal_dialog)
         menu_analysis.addAction(act_multi)
 
+        act_contours = QAction(tr("action.contours"), self)
+        act_contours.triggered.connect(lambda: self._show_analysis_dialog("contours"))
+        menu_analysis.addAction(act_contours)
+
         menu_analysis.addSeparator()
 
         act_reports = QAction(tr("action.my_reports"), self)
@@ -334,6 +348,16 @@ class MainWindow(QMainWindow):
         act_fig_history = QAction(tr("action.figures_history"), self)
         act_fig_history.triggered.connect(self._show_figures_history)
         menu_tools.addAction(act_fig_history)
+
+        menu_tools.addSeparator()
+
+        act_coord = QAction(tr("action.coordinate_picker"), self)
+        act_coord.triggered.connect(self._start_coordinate_picker)
+        menu_tools.addAction(act_coord)
+
+        act_ann = QAction(tr("action.annotations"), self)
+        act_ann.triggered.connect(self._start_annotations_tool)
+        menu_tools.addAction(act_ann)
 
         # --- Help ---
         menu_help = menubar.addMenu(tr("menu.help"))
@@ -1357,6 +1381,89 @@ class MainWindow(QMainWindow):
         dlg = self._get_classification_history_dialog()
         dlg.add_classification(algo, data)
         logger.info(f"Classification '{algo}' registered in history.")
+
+    # --- Coordinate Picker ---
+    def _start_coordinate_picker(self):
+        """Open the coordinate picker readout and activate viewport picking."""
+        logger.info("Coordinate picker activated")
+        from app.ui.viewport.coordinate_picker import CoordinatePickerDialog
+
+        if self._coord_picker_dialog is None:
+            self._coord_picker_dialog = CoordinatePickerDialog(self)
+
+        self._coord_picker_dialog.show()
+        self._coord_picker_dialog.raise_()
+        self._coord_picker_dialog.activateWindow()
+
+        def _on_coord_pick(x: float, y: float, z: float):
+            self._coord_picker_dialog.update_coords(x, y, z)
+            self._update_status(tr("coord.status").format(x, y, z))
+
+        self.viewport.enable_world_picking(_on_coord_pick)
+        self._update_status(tr("coord.instructions"))
+
+    # --- 3D Annotations ---
+    def _start_annotations_tool(self):
+        """Open the annotations dialog."""
+        logger.info("Annotations tool activated")
+        from app.ui.viewport.annotations_tool import AnnotationsToolDialog
+
+        if self._annotations_dialog is None:
+            self._annotations_dialog = AnnotationsToolDialog(self)
+            self._annotations_dialog.add_requested.connect(self._on_annotation_add_requested)
+            self._annotations_dialog.remove_requested.connect(self._on_annotation_remove)
+            self._annotations_dialog.clear_all_requested.connect(self._on_annotations_clear_all)
+
+        self._annotations_dialog.show()
+        self._annotations_dialog.raise_()
+        self._annotations_dialog.activateWindow()
+
+    def _on_annotation_add_requested(self):
+        """Ask for label text then arm viewport picking for placement."""
+        if self._annotations_dialog is None:
+            return
+        text = self._annotations_dialog.ask_text()
+        if not text:
+            return
+        self._pending_annotation_text = text
+        self.viewport.enable_world_picking(self._on_annotation_world_pick)
+        self._update_status(tr("ann.picking"))
+
+    def _on_annotation_world_pick(self, x: float, y: float, z: float):
+        """Receive the picked point and place the annotation."""
+        text = self._pending_annotation_text
+        self._pending_annotation_text = ""
+        self.viewport.disable_tools()
+
+        from app.ui.viewport.annotations_tool import AnnotationEntry
+        ann_id = self._annotations_next_id
+        self._annotations_next_id += 1
+
+        entry = AnnotationEntry(id=ann_id, text=text, x=x, y=y, z=z)
+        self._annotation_entries[ann_id] = entry
+
+        self.viewport.add_annotation(ann_id, (x, y, z), text)
+        if self._annotations_dialog is not None:
+            self._annotations_dialog.add_annotation(entry)
+
+        self._update_status(tr("ann.placed").format(text, x, y, z))
+        logger.info(f"Annotation {ann_id} '{text}' placed at ({x:.2f}, {y:.2f}, {z:.2f})")
+
+    def _on_annotation_remove(self, ann_id: int):
+        """Remove a single annotation."""
+        self._annotation_entries.pop(ann_id, None)
+        self.viewport.remove_annotation(ann_id)
+        if self._annotations_dialog is not None:
+            self._annotations_dialog.remove_annotation(ann_id)
+        logger.info(f"Annotation {ann_id} removed")
+
+    def _on_annotations_clear_all(self):
+        """Remove all annotations."""
+        self._annotation_entries.clear()
+        self.viewport.clear_annotations()
+        if self._annotations_dialog is not None:
+            self._annotations_dialog.clear_all()
+        logger.info("All annotations cleared")
 
     # --- Flythrough ---
     def _show_flythrough_dialog(self):
