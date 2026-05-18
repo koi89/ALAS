@@ -6,6 +6,9 @@ Extracts elevation iso-lines from a DTM/DSM raster using matplotlib contouring.
 from __future__ import annotations
 from typing import Optional
 import numpy as np
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 
 from app.core.raster_layer import RasterLayer
 from app.logger import get_logger
@@ -26,9 +29,6 @@ def generate_contours(
         {"elevation": float, "xy": np.ndarray shape (N, 2)}
     where xy contains projected XY coordinates matching the raster CRS.
     """
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
 
     data = raster.get_band(0)
     nodata = raster.nodata
@@ -90,9 +90,6 @@ def render_contour_figure(contours: list[dict], interval: float,
     Returns the path to the PNG file.
     """
     import tempfile
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
     from matplotlib.cm import get_cmap
     from matplotlib.colors import Normalize
 

@@ -159,7 +159,6 @@ class Viewport3D(QWidget):
     def render_prepared_cloud(self, cloud: pv.PolyData, name: str):
         """Upload a prepared PolyData mesh to the plotter — must run on the main thread."""
         has_colors = "RGB" in cloud.point_data
-        self._remove_actor(name)
         actor = self.plotter.add_mesh(
             cloud,
             scalars="RGB" if has_colors else None,
@@ -248,11 +247,10 @@ class Viewport3D(QWidget):
             depth[depth == raster.nodata] = np.nan
             depth[depth <= 0.0] = np.nan
 
-            self._remove_actor(name)
-
             if not np.any(np.isfinite(depth)):
-                # Water level below terrain — nothing flooded, nothing to show.
+                # Water level below terrain — nothing flooded, remove any old overlay.
                 logger.info(f"Flood layer '{name}': no flooded cells at this water level")
+                self._remove_actor(name)
                 return
 
             grid = pv.StructuredGrid(xx, yy, z)
@@ -287,9 +285,10 @@ class Viewport3D(QWidget):
             z[z == raster.nodata] = np.nan
 
             grid = pv.StructuredGrid(xx, yy, z)
-            self._remove_actor(name)
-
             grid["Elevation"] = z.ravel(order="F")
+            # PyVista's name= parameter replaces any existing mesh with this name
+            # atomically. Calling _remove_actor first would cause a double-remove
+            # that crashes VTK on subsequent runs of the same analysis.
             actor = self.plotter.add_mesh(
                 grid,
                 scalars="Elevation",
@@ -775,7 +774,6 @@ class Viewport3D(QWidget):
                    name: str, color: str = "#a855f7", opacity: float = 0.55):
         """Add a geometric figure as a named actor. Returns the actor."""
         mesh = self._build_figure_mesh(figure_type, center, params)
-        self._remove_actor(name)
         actor = self.plotter.add_mesh(
             mesh, color=color, opacity=opacity, name=name,
             show_edges=True, edge_color="#ffffff", line_width=1,
@@ -872,7 +870,6 @@ class Viewport3D(QWidget):
             ftype, _, params = self._figure_meta[self._drag_name]
             self._figure_meta[self._drag_name] = (ftype, [nx, ny, nz], params)
             mesh = self._build_figure_mesh(ftype, (nx, ny, nz), params)
-            self._remove_actor(self._drag_name)
             actor = self.plotter.add_mesh(
                 mesh, color="#a855f7", opacity=0.55, name=self._drag_name,
                 show_edges=True, edge_color="#ffffff", line_width=1,
@@ -1016,9 +1013,8 @@ class Viewport3D(QWidget):
         contours : list of {"elevation": float, "xy": ndarray (N, 2)}
         name     : actor name used for later removal / replacement
         """
-        self._remove_actor(name)
-
         if not contours:
+            self._remove_actor(name)
             return
 
         # Build a single PolyData with all polylines

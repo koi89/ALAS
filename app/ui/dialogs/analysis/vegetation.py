@@ -70,7 +70,7 @@ class VegetationResultsWindow(AnalysisResultsWindow):
         rgba = None
         return rgba, qimage, pixmap
 
-    def _get_legend_text(self, layer_type: str) -> str:
+    def _get_legend_text(self, layer_type: str, raster_layer=None) -> str:
         sq = "font-size: 15px;"
         legends = {
             "tree_tops": (
