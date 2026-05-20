@@ -48,15 +48,21 @@ class AnalysisReport:
         return "—"
 
 
-def save_report(user_id: int, title: str, disk_path: str) -> AnalysisReport | str:
-    """Save a PDF report record to DB. Returns AnalysisReport on success, error key on failure."""
-    p = Path(disk_path)
-    if not p.exists():
-        return "reports.error_file_not_found"
+def save_report(
+    user_id: int,
+    title: str,
+    disk_path: str,
+    filename: str,
+    size_bytes: int,
+) -> AnalysisReport | str:
+    """
+    Persist a PDF report row to DB.
 
-    filename = p.name
-    size_bytes = p.stat().st_size
-
+    `disk_path` is stored verbatim and is expected to be the path Laravel's
+    `Storage::disk('local')` would record, i.e. relative to the Laravel
+    local-disk root (e.g. "reports/12/abcd1234.pdf"). The caller is
+    responsible for having already written the bytes to that location.
+    """
     try:
         conn = get_connection()
         with conn:
@@ -69,7 +75,7 @@ def save_report(user_id: int, title: str, disk_path: str) -> AnalysisReport | st
                     RETURNING id, user_id, title, filename, disk_path, size_bytes,
                               share_token, created_at, updated_at
                     """,
-                    (user_id, title.strip(), filename, str(p.resolve()), size_bytes),
+                    (user_id, title.strip(), filename, disk_path, size_bytes),
                 )
                 row = cur.fetchone()
         conn.close()
