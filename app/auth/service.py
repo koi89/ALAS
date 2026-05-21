@@ -1,6 +1,9 @@
 """
 ALAS — Auth Service
-register, login, verify_session, logout against NeonDB.
+register, login, verify_session, logout against the Laravel backend's NeonDB.
+
+Schema is owned by the Laravel app at C:\\Users\\Usuario\\Desktop\\sexo\\web\\ALAS_WEB2.
+This module reads/writes those tables directly.
 """
 
 from __future__ import annotations
@@ -33,7 +36,7 @@ class User:
 class Subscription:
     plan_name: str
     billing_period: str  # monthly | annual | lifetime
-    status: str          # trialing | active | past_due | canceled | unpaid | lifetime
+    status: str          # trialing | active | past_due | canceled | lifetime | expired
     current_period_end: Optional[datetime.datetime]
     trial_ends_at: Optional[datetime.datetime]
 
@@ -44,12 +47,14 @@ class Subscription:
 
 def register(full_name: str, email: str, phone: str, password: str) -> User | str:
     """
-    Create a new user. Returns User on success, error string on failure.
+    Create a new user in the Laravel users table.
+    Returns User on success, error string on failure.
     """
     if not _valid_email(email):
         return "auth.error_invalid_email"
 
-    pw_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    pw_hash = _hash_password(password)
+    name = full_name.strip()
 
     try:
         conn = get_connection()
@@ -57,11 +62,12 @@ def register(full_name: str, email: str, phone: str, password: str) -> User | st
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    INSERT INTO users (full_name, email, phone, password_hash)
-                    VALUES (%s, %s, %s, %s)
+                    INSERT INTO users
+                        (name, full_name, email, phone, password, created_at, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, NOW(), NOW())
                     RETURNING id, full_name, email, phone, created_at
                     """,
-                    (full_name.strip(), email.strip().lower(), phone.strip() or None, pw_hash),
+                    (name, name, email.strip().lower(), phone.strip() or None, pw_hash),
                 )
                 row = cur.fetchone()
         conn.close()
@@ -77,14 +83,19 @@ def register(full_name: str, email: str, phone: str, password: str) -> User | st
 
 def login(email: str, password: str, remember_me: bool = False) -> tuple[User, str | None] | str:
     """
-    Verify credentials. Returns (User, token_or_None) on success,
-    error string on failure.
+    Verify credentials against the Laravel users table.
+    Returns (User, token_or_None) on success, error string on failure.
     """
     try:
         conn = get_connection()
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT id, full_name, email, phone, password_hash, created_at FROM users WHERE email = %s",
+                """
+                SELECT id, COALESCE(full_name, name) AS full_name, email, phone,
+                       password, created_at
+                FROM users
+                WHERE email = %s
+                """,
                 (email.strip().lower(),),
             )
             row = cur.fetchone()
@@ -97,7 +108,7 @@ def login(email: str, password: str, remember_me: bool = False) -> tuple[User, s
         return "auth.error_invalid_credentials"
 
     user_id, full_name, db_email, phone, pw_hash, created_at = row
-    if not bcrypt.checkpw(password.encode(), pw_hash.encode()):
+    if not _verify_password(password, pw_hash):
         return "auth.error_invalid_credentials"
 
     user = User(user_id, full_name, db_email, phone, created_at)
@@ -116,17 +127,19 @@ def verify_session(token: str) -> Optional[User]:
         return None
     try:
         conn = get_connection()
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT u.id, u.full_name, u.email, u.phone, u.created_at
-                FROM sessions s
-                JOIN users u ON u.id = s.user_id
-                WHERE s.token = %s AND s.expires_at > NOW()
-                """,
-                (token,),
-            )
-            row = cur.fetchone()
+        with conn:
+            with conn.cursor() as cur:
+                _ensure_desktop_sessions_table(cur)
+                cur.execute(
+                    """
+                    SELECT u.id, COALESCE(u.full_name, u.name), u.email, u.phone, u.created_at
+                    FROM desktop_sessions s
+                    JOIN users u ON u.id = s.user_id
+                    WHERE s.token = %s AND s.expires_at > NOW()
+                    """,
+                    (token,),
+                )
+                row = cur.fetchone()
         conn.close()
         if row:
             return User(*row)
@@ -136,7 +149,7 @@ def verify_session(token: str) -> Optional[User]:
 
 
 def get_subscription(user_id: int) -> Optional[Subscription]:
-    """Return the most recent active/trialing subscription for the user, or None."""
+    """Return the most relevant subscription row for the user, or None."""
     try:
         conn = get_connection()
         with conn.cursor() as cur:
@@ -169,14 +182,15 @@ def get_subscription(user_id: int) -> Optional[Subscription]:
 
 
 def logout(token: str):
-    """Delete the session row from DB."""
+    """Delete the desktop session row from DB."""
     if not token:
         return
     try:
         conn = get_connection()
         with conn:
             with conn.cursor() as cur:
-                cur.execute("DELETE FROM sessions WHERE token = %s", (token,))
+                _ensure_desktop_sessions_table(cur)
+                cur.execute("DELETE FROM desktop_sessions WHERE token = %s", (token,))
         conn.close()
         logger.info("Session deleted")
     except Exception as e:
@@ -193,12 +207,53 @@ def _create_session(user_id: int) -> str:
     conn = get_connection()
     with conn:
         with conn.cursor() as cur:
+            _ensure_desktop_sessions_table(cur)
             cur.execute(
-                "INSERT INTO sessions (user_id, token, expires_at) VALUES (%s, %s, %s)",
+                "INSERT INTO desktop_sessions (user_id, token, expires_at) VALUES (%s, %s, %s)",
                 (user_id, token, expires),
             )
     conn.close()
     return token
+
+
+def _ensure_desktop_sessions_table(cur):
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS desktop_sessions (
+            id          BIGSERIAL PRIMARY KEY,
+            user_id     BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            token       VARCHAR(64) NOT NULL UNIQUE,
+            expires_at  TIMESTAMPTZ NOT NULL,
+            created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+        """
+    )
+
+
+def _hash_password(password: str) -> str:
+    """
+    Hash a password with bcrypt and return it with the $2y$ prefix Laravel uses.
+    PHP's password_verify accepts $2a/$2b/$2x/$2y interchangeably, and Python's
+    bcrypt.checkpw does the same, so this is a cosmetic convention to match
+    what Laravel writes itself.
+    """
+    h = bcrypt.hashpw(password.encode(), bcrypt.gensalt(rounds=12)).decode()
+    if h.startswith("$2b$"):
+        h = "$2y$" + h[4:]
+    return h
+
+
+def _verify_password(password: str, stored_hash: str) -> bool:
+    if not stored_hash:
+        return False
+    # Normalize Laravel's $2y$ to Python bcrypt's $2b$ for the checkpw call.
+    h = stored_hash
+    if h.startswith("$2y$"):
+        h = "$2b$" + h[4:]
+    try:
+        return bcrypt.checkpw(password.encode(), h.encode())
+    except (ValueError, TypeError):
+        return False
 
 
 def _valid_email(email: str) -> bool:

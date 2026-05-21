@@ -178,11 +178,23 @@ def show_history_dialog(
         if not ok or not title.strip():
             return
 
+        import os
         import pathlib
-        reports_dir = pathlib.Path.home() / ".alas" / "reports" / str(user.id)
-        reports_dir.mkdir(parents=True, exist_ok=True)
+        import uuid
+
+        web_root = pathlib.Path(os.environ.get("ALAS_WEB_STORAGE_ROOT", "")).expanduser()
+        if not web_root or not web_root.exists():
+            QMessageBox.critical(
+                dlg, tr("reports.title"),
+                f"ALAS_WEB_STORAGE_ROOT is not set or unreachable: {web_root}",
+            )
+            return
+
         safe_ts = item["timestamp"].replace(":", "-")
-        pdf_path = reports_dir / f"{tab_type}_{safe_ts}.pdf"
+        original_name = f"{tab_type}_{safe_ts}.pdf"
+        rel_disk_path = f"reports/{user.id}/{uuid.uuid4().hex}.pdf"
+        pdf_path = web_root / rel_disk_path
+        pdf_path.parent.mkdir(parents=True, exist_ok=True)
 
         metadata = {
             tr(source_label_key): item["layer"],
@@ -200,12 +212,12 @@ def show_history_dialog(
         def do_save():
             from app.processing.exporters import export_pdf_report
             from app.auth.reports_service import save_report
-            try:
-                export_pdf_report(final_title, metadata, stats, [], pdf_path_str,
-                                  analysis_results=analysis_results)
-            finally:
-                shutil.rmtree(tmp_dir, ignore_errors=True)
-            return save_report(user_id, final_title, pdf_path_str)
+            export_pdf_report(final_title, metadata, stats, [], pdf_path_str,
+                              analysis_results=analysis_results)
+            size_bytes = pdf_path.stat().st_size
+            return save_report(
+                user_id, final_title, rel_disk_path, original_name, size_bytes
+            )
 
         def on_result(result):
             btn_save.setEnabled(True)

@@ -7,6 +7,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import uuid
 from pathlib import Path
 from typing import List, Optional
 
@@ -25,6 +26,26 @@ from app.processing.workers import ProcessingWorker
 from app.ui.widgets import LoadingOverlay
 
 logger = get_logger("ui.reports_dialog")
+
+
+def _web_storage_root() -> Path:
+    """Root of the Laravel `local` disk (storage/app/private)."""
+    return Path(os.environ.get("ALAS_WEB_STORAGE_ROOT", "")).expanduser()
+
+
+def _resolve_disk_path(disk_path: str) -> Path:
+    """
+    Resolve a stored `disk_path` to an absolute filesystem path.
+
+    Relative paths are interpreted as Laravel disk-relative (e.g.
+    "reports/12/abcd.pdf") and joined to ALAS_WEB_STORAGE_ROOT.
+    Absolute paths from legacy rows are kept as-is.
+    """
+    p = Path(disk_path)
+    if p.is_absolute():
+        return p
+    root = _web_storage_root()
+    return (root / disk_path) if root else p
 
 
 def _open_pdf(path: str):
@@ -392,6 +413,12 @@ class ReportsDialog(QDialog):
             QMessageBox.warning(self, tr("reports.title"), tr("reports.no_user"))
             return
 
+        root = _web_storage_root()
+        if not root or not root.exists():
+            logger.error(f"ALAS_WEB_STORAGE_ROOT missing or unreachable: {root}")
+            QMessageBox.critical(self, tr("reports.title"), tr("reports.error_save"))
+            return
+
         path, _ = QFileDialog.getOpenFileName(
             self, tr("reports.upload_dialog_title"), "",
             f"PDF (*.pdf)"
@@ -399,25 +426,34 @@ class ReportsDialog(QDialog):
         if not path:
             return
 
+        src = Path(path)
+
         title, ok = QInputDialog.getText(
             self, tr("reports.title_input"), tr("reports.title_prompt"),
-            text=Path(path).stem
+            text=src.stem
         )
         if not ok or not title.strip():
             return
 
-        dest = self._ensure_reports_dir() / Path(path).name
+        user_id = self._user.id
+        suffix = src.suffix or ".pdf"
+        rel_disk_path = f"reports/{user_id}/{uuid.uuid4().hex}{suffix}"
+        dest = root / rel_disk_path
+        dest.parent.mkdir(parents=True, exist_ok=True)
+
         import shutil
-        shutil.copy2(path, dest)
+        shutil.copy2(src, dest)
+        size_bytes = dest.stat().st_size
+        original_name = src.name
 
         self._set_busy(True)
-        user_id = self._user.id
         final_title = title.strip()
-        dest_str = str(dest)
 
         def save():
             from app.auth.reports_service import save_report
-            return save_report(user_id, final_title, dest_str)
+            return save_report(
+                user_id, final_title, rel_disk_path, original_name, size_bytes
+            )
 
         def on_result(result):
             self._set_busy(False)
@@ -438,10 +474,11 @@ class ReportsDialog(QDialog):
         report = self._selected_report()
         if not report:
             return
-        if not Path(report.disk_path).exists():
+        full = _resolve_disk_path(report.disk_path)
+        if not full.exists():
             QMessageBox.warning(self, tr("reports.title"), tr("reports.file_missing"))
             return
-        if not _open_pdf(report.disk_path):
+        if not _open_pdf(str(full)):
             QMessageBox.warning(self, tr("reports.title"), tr("reports.file_missing"))
 
     def _toggle_share(self):
@@ -509,11 +546,6 @@ class ReportsDialog(QDialog):
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
-
-    def _ensure_reports_dir(self) -> Path:
-        d = Path.home() / ".alas" / "reports" / str(self._user.id)
-        d.mkdir(parents=True, exist_ok=True)
-        return d
 
     def show_and_raise(self):
         self._load_reports()
