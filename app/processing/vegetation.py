@@ -75,8 +75,8 @@ def segment_crowns(chm: RasterLayer, tree_tops: np.ndarray,
 
     if chm.transform:
         for i, (x, y, h) in enumerate(tree_tops):
-            col = int((x - chm.transform.c) / chm.transform.a)
-            row = int((y - chm.transform.f) / chm.transform.e)
+            col = int((x - chm.transform.c) / chm.transform.a - 0.5)
+            row = int((y - chm.transform.f) / chm.transform.e - 0.5)
             if 0 <= row < data.shape[0] and 0 <= col < data.shape[1]:
                 markers[row, col] = i + 1
     elif chm.bounds:
@@ -163,8 +163,8 @@ def compute_canopy_stats(chm: RasterLayer,
         mean_col = cols.mean()
 
         if chm.transform:
-            cx = chm.transform.c + mean_col * chm.transform.a
-            cy = chm.transform.f + mean_row * chm.transform.e
+            cx = chm.transform.c + (mean_col + 0.5) * chm.transform.a
+            cy = chm.transform.f + (mean_row + 0.5) * chm.transform.e
         else:
             cx, cy = mean_col, mean_row
 

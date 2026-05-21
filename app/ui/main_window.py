@@ -8,7 +8,7 @@ from pathlib import Path
 from PyQt6.QtWidgets import (
     QMainWindow, QDockWidget, QFileDialog, QMessageBox,
     QLabel, QWidget, QVBoxLayout, QApplication,
-    QTabWidget, QMenuBar, QMenu, QToolBar, QStatusBar, QPushButton, QDialog
+    QTabWidget, QToolBar, QStatusBar, QPushButton, QDialog
 )
 from PyQt6.QtCore import Qt, QSize, QThreadPool, QTimer
 from PyQt6.QtGui import QAction, QKeySequence, QIcon, QPixmap, QPainter, QFont, QColor, QPainterPath
@@ -32,6 +32,10 @@ from app.config import (
     RASTER_EXTENSIONS
 )
 from app.i18n import tr, set_language, get_language
+from app.ui.menu_bar import build_menu_bar
+from app.ui.controllers.measurement_controller import MeasurementController
+from app.ui.controllers.figure_controller import FigureController
+from app.ui.controllers.annotation_controller import AnnotationController
 from app.logger import get_logger
 
 logger = get_logger("ui.main_window")
@@ -58,15 +62,8 @@ class MainWindow(QMainWindow):
         saved_lang = self.preferences.get("language", "es")
         set_language(saved_lang)
 
-        # Tool dialogs
-        self._area_dialog = None
-        self._distance_dialog = None
-        self._measurements_dialog = None
-        self._classification_history_dialog = None
-        self._reports_dialog = None
-        self._figures_dialog = None
-        self._figures_history_dialog = None
-        self._figure_actor_names: dict[int, str] = {}
+        # Coordinate picker (small enough to live here)
+        self._coord_picker_dialog = None
 
         # Setup UI
         self._setup_window()
@@ -76,10 +73,13 @@ class MainWindow(QMainWindow):
         self._setup_status_bar()
         self._connect_signals()
         self._setup_shortcuts()
-        
-        # Restore geometry
-        self._restore_state()
 
+        # Controllers (depend on viewport + panels being ready)
+        self._measurements = MeasurementController(self)
+        self._figures      = FigureController(self)
+        self._annotations  = AnnotationController(self)
+
+        self._restore_state()
         logger.info(f"{APP_NAME} v{APP_VERSION} started")
 
     # ==================================================================
@@ -96,38 +96,24 @@ class MainWindow(QMainWindow):
             QMainWindow.DockOption.AnimatedDocks
         )
 
-    # ==================================================================
-    # Viewport (central widget)
-    # ==================================================================
-
     def _setup_viewport(self):
         self.viewport = Viewport3D(self)
         self.setCentralWidget(self.viewport)
-        
         self._loading_overlay = LoadingOverlay(self)
         self._loading_overlay.hide()
 
-    # ==================================================================
-    # Dock Panels
-    # ==================================================================
-
     def _setup_panels(self):
-        # --- Left: Layers ---
         self.layer_panel = LayerPanel(self.layer_manager, self)
         dock_layers = QDockWidget(tr("panel.layers"), self)
         dock_layers.setWidget(self.layer_panel)
         dock_layers.setMinimumWidth(220)
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, dock_layers)
 
-        # --- Right: Properties + Tools (tabbed) ---
         right_tabs = QTabWidget()
-
         self.properties_panel = PropertiesPanel(self.layer_manager, self)
         right_tabs.addTab(self.properties_panel, tr("panel.properties"))
-
         self.tools_panel = ToolsPanel(self)
         right_tabs.addTab(self.tools_panel, tr("panel.tools"))
-
         self.statistics_panel = StatisticsPanel(self.layer_manager, self)
         right_tabs.addTab(self.statistics_panel, tr("panel.statistics"))
 
@@ -136,291 +122,93 @@ class MainWindow(QMainWindow):
         dock_right.setMinimumWidth(280)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock_right)
 
-        # --- Bottom: Log ---
         self.log_panel = LogPanel(self)
         dock_log = QDockWidget(tr("panel.log"), self)
         dock_log.setWidget(self.log_panel)
         dock_log.setMaximumHeight(200)
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, dock_log)
 
-    # ==================================================================
-    # Menu Bar
-    # ==================================================================
-
     def _setup_menu_bar(self):
-        menubar = self.menuBar()
-
-        # --- File ---
-        menu_file = menubar.addMenu(tr("menu.file"))
-
-        act_open = QAction(tr("action.open"), self)
-        act_open.setShortcut(QKeySequence("Ctrl+O"))
-        act_open.triggered.connect(self._open_file)
-        menu_file.addAction(act_open)
-
-        act_open_multi = QAction(tr("action.open_multiple"), self)
-        act_open_multi.setShortcut(QKeySequence("Ctrl+Shift+O"))
-        act_open_multi.triggered.connect(self._open_multiple_files)
-        menu_file.addAction(act_open_multi)
-
-        menu_file.addSeparator()
-
-        act_save = QAction(tr("action.save_project"), self)
-        act_save.setShortcut(QKeySequence("Ctrl+S"))
-        act_save.triggered.connect(self._save_project)
-        menu_file.addAction(act_save)
-
-        act_load = QAction(tr("action.load_project"), self)
-        act_load.setShortcut(QKeySequence("Ctrl+Shift+S"))
-        act_load.triggered.connect(self._load_project)
-        menu_file.addAction(act_load)
-
-        menu_file.addSeparator()
-
-        act_export = QAction(tr("action.export"), self)
-        act_export.setShortcut(QKeySequence("Ctrl+E"))
-        act_export.triggered.connect(self._show_export_dialog)
-        menu_file.addAction(act_export)
-
-        act_flythrough = QAction(tr("action.flythrough"), self)
-        act_flythrough.setShortcut(QKeySequence("Ctrl+Shift+F"))
-        act_flythrough.triggered.connect(self._show_flythrough_dialog)
-        menu_file.addAction(act_flythrough)
-
-        menu_file.addSeparator()
-
-        act_exit = QAction(tr("action.exit"), self)
-        act_exit.setShortcut(QKeySequence("Ctrl+Q"))
-        act_exit.triggered.connect(self.close)
-        menu_file.addAction(act_exit)
-
-        # --- View ---
-        menu_view = menubar.addMenu(tr("menu.view"))
-
-        act_reset = QAction(tr("action.reset_view"), self)
-        act_reset.setShortcut(QKeySequence("R"))
-        act_reset.triggered.connect(self.viewport.reset_camera)
-        menu_view.addAction(act_reset)
-
-        act_top = QAction(tr("action.top_view"), self)
-        act_top.setShortcut(QKeySequence("T"))
-        act_top.triggered.connect(self.viewport.set_view_top)
-        menu_view.addAction(act_top)
-
-        act_front = QAction(tr("action.front_view"), self)
-        act_front.setShortcut(QKeySequence("F"))
-        act_front.triggered.connect(self.viewport.set_view_front)
-        menu_view.addAction(act_front)
-
-        act_side = QAction(tr("action.side_view"), self)
-        act_side.setShortcut(QKeySequence("S"))
-        act_side.triggered.connect(self.viewport.set_view_side)
-        menu_view.addAction(act_side)
-
-        menu_view.addSeparator()
-
-        # Language submenu
-        menu_lang = menu_view.addMenu(tr("menu.language"))
-        act_es = QAction(tr("lang.spanish"), self)
-        act_es.triggered.connect(lambda: self._change_language("es"))
-        menu_lang.addAction(act_es)
-        act_en = QAction(tr("lang.english"), self)
-        act_en.triggered.connect(lambda: self._change_language("en"))
-        menu_lang.addAction(act_en)
-
-        # --- Process ---
-        menu_proc = menubar.addMenu(tr("menu.process"))
-
-        act_classify = QAction(tr("action.classify"), self)
-        act_classify.triggered.connect(self._show_classification_dialog)
-        menu_proc.addAction(act_classify)
-
-        act_class_history = QAction(tr("action.classification_history"), self)
-        act_class_history.setShortcut(QKeySequence("Ctrl+Shift+H"))
-        act_class_history.triggered.connect(self._show_classification_history)
-        menu_proc.addAction(act_class_history)
-
-        menu_proc.addSeparator()
-
-        act_dem = QAction(tr("action.generate_dem"), self)
-        act_dem.triggered.connect(self._show_dem_dialog)
-        menu_proc.addAction(act_dem)
-
-        menu_proc.addSeparator()
-
-        act_merge = QAction(tr("action.merge_tiles"), self)
-        act_merge.triggered.connect(self._merge_tiles)
-        menu_proc.addAction(act_merge)
-
-        act_noise = QAction(tr("action.filter_noise"), self)
-        act_noise.triggered.connect(self._filter_noise)
-        menu_proc.addAction(act_noise)
-
-        act_reproj = QAction(tr("action.reproject"), self)
-        act_reproj.triggered.connect(self._show_reproject_dialog)
-        menu_proc.addAction(act_reproj)
-
-        act_decimate = QAction(tr("action.decimate"), self)
-        act_decimate.triggered.connect(self._decimate_cloud)
-        menu_proc.addAction(act_decimate)
-
-        act_overlap = QAction(tr("action.remove_overlap"), self)
-        act_overlap.triggered.connect(self._remove_overlap)
-        menu_proc.addAction(act_overlap)
-
-        menu_proc.addSeparator()
-
-        act_batch = QAction(tr("action.batch"), self)
-        act_batch.setShortcut(QKeySequence("Ctrl+B"))
-        act_batch.triggered.connect(self._show_batch_dialog)
-        menu_proc.addAction(act_batch)
-
-        # --- Analysis ---
-        menu_analysis = menubar.addMenu(tr("menu.analysis"))
-
-        act_geomorph = QAction(tr("action.geomorphology"), self)
-        act_geomorph.triggered.connect(self._show_geomorphology_dialog)
-        menu_analysis.addAction(act_geomorph)
-
-        act_hydro = QAction(tr("action.hydrology"), self)
-        act_hydro.triggered.connect(self._show_hydrology_dialog)
-        menu_analysis.addAction(act_hydro)
-
-        act_veg = QAction(tr("action.vegetation"), self)
-        act_veg.triggered.connect(self._show_vegetation_dialog)
-        menu_analysis.addAction(act_veg)
-
-        act_multi = QAction(tr("action.multitemporal"), self)
-        act_multi.triggered.connect(self._show_multitemporal_dialog)
-        menu_analysis.addAction(act_multi)
-
-        menu_analysis.addSeparator()
-
-        act_reports = QAction(tr("action.my_reports"), self)
-        act_reports.setShortcut(QKeySequence("Ctrl+Shift+R"))
-        act_reports.triggered.connect(self._show_reports_dialog)
-        menu_analysis.addAction(act_reports)
-
-        # --- Tools ---
-        menu_tools = menubar.addMenu(tr("menu.tools"))
-
-        act_profile = QAction(tr("action.profile"), self)
-        act_profile.triggered.connect(self._start_profile_tool)
-        menu_tools.addAction(act_profile)
-
-        act_dist = QAction(tr("action.distance"), self)
-        act_dist.triggered.connect(self._start_distance_tool)
-        menu_tools.addAction(act_dist)
-
-        act_area = QAction(tr("action.area"), self)
-        act_area.triggered.connect(self._start_area_tool)
-        menu_tools.addAction(act_area)
-
-        act_vol = QAction(tr("action.volume"), self)
-        act_vol.triggered.connect(self._start_volume_tool)
-        menu_tools.addAction(act_vol)
-
-        act_figures = QAction(tr("action.figures"), self)
-        act_figures.triggered.connect(self._show_figures_tool)
-        menu_tools.addAction(act_figures)
-
-        menu_tools.addSeparator()
-
-        act_history = QAction(tr("action.measurements"), self)
-        act_history.setShortcut(QKeySequence("Ctrl+H"))
-        act_history.triggered.connect(self._show_measurements_history)
-        menu_tools.addAction(act_history)
-
-        act_fig_history = QAction(tr("action.figures_history"), self)
-        act_fig_history.triggered.connect(self._show_figures_history)
-        menu_tools.addAction(act_fig_history)
-
-        # --- Help ---
-        menu_help = menubar.addMenu(tr("menu.help"))
-
-        act_tutorial = QAction(tr("action.tutorial"), self)
-        act_tutorial.setMenuRole(QAction.MenuRole.NoRole)
-        act_tutorial.setShortcut(QKeySequence("F1"))
-        act_tutorial.triggered.connect(self._show_tutorial)
-        menu_help.addAction(act_tutorial)
-
-        act_shortcuts = QAction(tr("action.shortcuts"), self)
-        act_shortcuts.setMenuRole(QAction.MenuRole.NoRole)
-        act_shortcuts.triggered.connect(self._show_shortcuts)
-        menu_help.addAction(act_shortcuts)
-
-        act_glossary = QAction(tr("action.glossary"), self)
-        act_glossary.setMenuRole(QAction.MenuRole.NoRole)
-        act_glossary.triggered.connect(self._show_glossary)
-        menu_help.addAction(act_glossary)
-
-        menu_help.addSeparator()
-
-        act_about_help = QAction(tr("dialog.about_title"), self)
-        act_about_help.setMenuRole(QAction.MenuRole.NoRole)
-        act_about_help.triggered.connect(self._show_about)
-        menu_help.addAction(act_about_help)
-
-        # --- More ---
-        menu_more = menubar.addMenu(tr("menu.more"))
-
-        act_profile = QAction(tr("action.my_profile"), self)
-        act_profile.setMenuRole(QAction.MenuRole.NoRole)
-        act_profile.triggered.connect(self._show_profile)
-        menu_more.addAction(act_profile)
-
-        menu_more.addSeparator()
-
-        act_settings = QAction(tr("action.settings"), self)
-        act_settings.setMenuRole(QAction.MenuRole.NoRole)
-        act_settings.setShortcut(QKeySequence("Ctrl+,"))
-        act_settings.triggered.connect(self._show_settings)
-        menu_more.addAction(act_settings)
-
-        # Avatar button — far right of the menu bar
-        self._user_btn = QPushButton()
-        self._user_btn.setFixedSize(30, 30)
-        self._user_btn.setObjectName("avatarBtn")
-        self._user_btn.setToolTip(tr("auth.my_account"))
-        self._user_btn.clicked.connect(self._show_user_panel)
-        if self._current_user:
-            self._user_btn.setIcon(QIcon(self._make_avatar_pixmap(self._current_user.full_name)))
-            self._user_btn.setIconSize(QSize(26, 26))
-        else:
-            self._user_btn.setVisible(False)
-        self.menuBar().setCornerWidget(self._user_btn, Qt.Corner.TopRightCorner)
-
-    # ==================================================================
-    # Status Bar
-    # ==================================================================
+        build_menu_bar(self)
 
     def _setup_status_bar(self):
         self.statusBar().setStyleSheet("QStatusBar { font-size: 12px; }")
-
         self._status_label = QLabel(tr("status.ready"))
         self.statusBar().addWidget(self._status_label, 1)
-
         self._crs_label = QLabel(tr("status.no_crs"))
         self._crs_label.setStyleSheet("color: #a855f7; font-weight: 600;")
         self.statusBar().addPermanentWidget(self._crs_label)
-
         self._points_label = QLabel("0 " + tr("status.points"))
         self.statusBar().addPermanentWidget(self._points_label)
+
+    def _setup_shortcuts(self):
+        self._act_clear = QAction(tr("action.reset_view"), self)
+        self._act_clear.setShortcut(QKeySequence("Esc"))
+        self._act_clear.triggered.connect(self._clear_active_tools)
+        self.addAction(self._act_clear)
+
+    def _clear_active_tools(self):
+        self.viewport.disable_tools()
+        self._update_status(tr("status.ready"))
+        logger.info("Tools cleared by user")
+
+    # ==================================================================
+    # Signal connections
+    # ==================================================================
+
+    def _connect_signals(self):
+        self.tools_panel.point_size_changed.connect(self.viewport.set_point_size)
+        self.tools_panel.colorize_mode_changed.connect(self._on_colorize_mode_changed)
+        self.tools_panel.view_reset_requested.connect(self.viewport.reset_camera)
+        self.tools_panel.view_top_requested.connect(self.viewport.set_view_top)
+        self.tools_panel.view_front_requested.connect(self.viewport.set_view_front)
+        self.tools_panel.view_side_requested.connect(self.viewport.set_view_side)
+
+        self.layer_panel.zoom_to_layer_requested.connect(self._zoom_to_layer)
+        self.layer_panel.export_layer_requested.connect(self._export_layer)
+        self.layer_panel.figure_edit_requested.connect(
+            lambda fid: self._figures.on_edit_from_layer(fid)
+        )
+        self.layer_panel.figure_remove_requested.connect(
+            lambda fid: self._figures.on_remove_from_layer(fid)
+        )
+
+        self.layer_manager.layer_added.connect(self._on_layer_added)
+        self.layer_manager.layer_removed.connect(lambda _: self._update_points_display())
+        self.layer_manager.layer_visibility_changed.connect(self._on_visibility_changed)
+        self.layer_manager.active_layer_changed.connect(self._on_active_layer_changed)
+
+    def _on_layer_added(self, index: int):
+        self._update_points_display()
+        entry = self.layer_manager.get_entry(index)
+        if not entry:
+            return
+        if entry.is_point_cloud:
+            colorize_by = self.viewport._colorize_mode
+            name = entry.name
+            layer = entry.layer
+            self._run_processing(
+                Viewport3D.prepare_display_data,
+                layer, colorize_by,
+                on_result=lambda cloud: self.viewport.render_prepared_cloud(cloud, name),
+            )
+        elif entry.is_raster:
+            self.viewport.display_raster_surface(entry.layer, name=entry.name)
+
+    # ==================================================================
+    # Status bar helpers
+    # ==================================================================
 
     def _make_avatar_pixmap(self, full_name: str, size: int = 28) -> QPixmap:
         parts = full_name.strip().split()
         initials = (parts[0][0] + (parts[-1][0] if len(parts) > 1 else "")).upper()
-
         px = QPixmap(size, size)
         px.fill(Qt.GlobalColor.transparent)
-
         painter = QPainter(px)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-
         path = QPainterPath()
         path.addEllipse(0, 0, size, size)
         painter.fillPath(path, QColor("#333348"))
-
         painter.setPen(QColor("#c0c0e0"))
         font = QFont("Segoe UI", size // 3, QFont.Weight.Bold)
         painter.setFont(font)
@@ -444,62 +232,6 @@ class MainWindow(QMainWindow):
         )
         self._points_label.setText(f"{total:,} {tr('status.points')}")
 
-    def _setup_shortcuts(self):
-        """Configures global keyboard shortcuts."""
-        self._act_clear = QAction(tr("action.reset_view"), self)
-        self._act_clear.setShortcut(QKeySequence("Esc"))
-        self._act_clear.triggered.connect(self._clear_active_tools)
-        self.addAction(self._act_clear)
-
-    def _clear_active_tools(self):
-        """Stops any active tool and clears the viewport."""
-        self.viewport.disable_tools()
-        self._update_status(tr("status.ready"))
-        logger.info("Tools cleared by user")
-
-    # ==================================================================
-    # Signal connections
-    # ==================================================================
-
-    def _connect_signals(self):
-        # Tools panel
-        self.tools_panel.point_size_changed.connect(self.viewport.set_point_size)
-        self.tools_panel.colorize_mode_changed.connect(self._on_colorize_mode_changed)
-        self.tools_panel.view_reset_requested.connect(self.viewport.reset_camera)
-        self.tools_panel.view_top_requested.connect(self.viewport.set_view_top)
-        self.tools_panel.view_front_requested.connect(self.viewport.set_view_front)
-        self.tools_panel.view_side_requested.connect(self.viewport.set_view_side)
-
-        # Layer panel
-        self.layer_panel.zoom_to_layer_requested.connect(self._zoom_to_layer)
-        self.layer_panel.export_layer_requested.connect(self._export_layer)
-        self.layer_panel.figure_edit_requested.connect(self._on_figure_edit_from_layer)
-        self.layer_panel.figure_remove_requested.connect(self._on_figure_remove_from_layer)
-
-        # Layer manager
-        self.layer_manager.layer_added.connect(self._on_layer_added)
-        self.layer_manager.layer_removed.connect(lambda _: self._update_points_display())
-        self.layer_manager.layer_visibility_changed.connect(self._on_visibility_changed)
-        self.layer_manager.active_layer_changed.connect(self._on_active_layer_changed)
-
-
-    def _on_layer_added(self, index: int):
-        self._update_points_display()
-        entry = self.layer_manager.get_entry(index)
-        if not entry:
-            return
-        if entry.is_point_cloud:
-            colorize_by = self.viewport._colorize_mode
-            name = entry.name
-            layer = entry.layer
-            self._run_processing(
-                Viewport3D.prepare_display_data,
-                layer, colorize_by,
-                on_result=lambda cloud: self.viewport.render_prepared_cloud(cloud, name),
-            )
-        elif entry.is_raster:
-            self.viewport.display_raster_surface(entry.layer, name=entry.name)
-
     # ==================================================================
     # File operations
     # ==================================================================
@@ -516,8 +248,7 @@ class MainWindow(QMainWindow):
     def _open_multiple_files(self):
         last_dir = self.preferences.get("last_import_dir", "")
         file_paths, _ = QFileDialog.getOpenFileNames(
-            self, tr("action.open_multiple"), last_dir,
-            POINT_CLOUD_FILTER
+            self, tr("action.open_multiple"), last_dir, POINT_CLOUD_FILTER
         )
         for fp in file_paths:
             self._load_file(fp)
@@ -525,7 +256,6 @@ class MainWindow(QMainWindow):
     def _load_file(self, file_path: str):
         self.preferences.set("last_import_dir", str(Path(file_path).parent))
         self.preferences.add_recent_file(file_path)
-
         ext = Path(file_path).suffix.lower()
         self._update_status(tr("status.loading"))
 
@@ -534,14 +264,12 @@ class MainWindow(QMainWindow):
             loader_func = PointCloudData.from_file
             try:
                 import laspy
-                from PyQt6.QtWidgets import QMessageBox, QInputDialog
+                from PyQt6.QtWidgets import QInputDialog
                 with laspy.open(file_path) as f:
                     total_points = f.header.point_count
-                
-                if total_points > 1000000:  # Only ask if > 1M points
+                if total_points > 1000000:
                     reply = QMessageBox.question(
-                        self,
-                        tr("action.open"),
+                        self, tr("action.open"),
                         tr("msg.decimate_question").format(total_points),
                         QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
                     )
@@ -561,34 +289,27 @@ class MainWindow(QMainWindow):
             return
 
         worker = FileLoadWorker(file_path, loader_func, **kwargs)
-        
-        # Connect signals
         worker.signals.started.connect(lambda: self._loading_overlay.show_loading())
         worker.signals.result.connect(lambda res: self._on_file_loaded(res, ext, file_path))
         worker.signals.error.connect(lambda err: self._on_file_load_error(err, file_path))
         worker.signals.finished.connect(lambda: self._loading_overlay.hide_loading())
-        
         self.thread_pool.start(worker)
 
     def _on_file_loaded(self, result, ext, file_path):
         if ext in POINT_CLOUD_EXTENSIONS:
             self.layer_manager.add_layer(result)
             self.viewport.reset_camera()
-
             if result.crs_epsg:
                 self._update_crs_display(result.crs_epsg)
                 self.preferences.last_crs = result.crs_epsg
             else:
                 self._update_crs_display(None)
                 self._prompt_crs_assignment(result)
-
         elif ext in RASTER_EXTENSIONS:
             self.layer_manager.add_layer(result)
             self.viewport.reset_camera()
-
             if result.crs_epsg:
                 self._update_crs_display(result.crs_epsg)
-
         self._update_status(tr("success.loaded"))
         self.project.loaded_files.append(file_path)
 
@@ -598,7 +319,6 @@ class MainWindow(QMainWindow):
         self._update_status(tr("status.ready"))
 
     def _run_processing(self, func, *args, on_result, on_error=None, **kwargs):
-        """Run func in a thread with loading overlay. on_result/on_error called on main thread."""
         self._update_status(tr("status.processing"))
         worker = ProcessingWorker(func, *args, **kwargs)
         worker.signals.started.connect(self._loading_overlay.show_loading)
@@ -615,11 +335,9 @@ class MainWindow(QMainWindow):
         self._update_status(tr("status.ready"))
 
     def _prompt_crs_assignment(self, pc: PointCloudData):
-        """If the file has no CRS, ask the user."""
         from PyQt6.QtWidgets import QInputDialog
         last_crs = self.preferences.last_crs
         default_text = str(last_crs) if last_crs else "25830"
-
         epsg_str, ok = QInputDialog.getText(
             self, tr("prop.crs"),
             f"{tr('error.no_crs')}\n\n{tr('msg.enter_epsg')}",
@@ -643,8 +361,7 @@ class MainWindow(QMainWindow):
     def _save_project(self):
         last_dir = self.preferences.get("last_export_dir", "")
         path, _ = QFileDialog.getSaveFileName(
-            self, tr("action.save_project"), last_dir,
-            "ALAS Project (*.alas)"
+            self, tr("action.save_project"), last_dir, "ALAS Project (*.alas)"
         )
         if path:
             self.project.save(path)
@@ -652,8 +369,7 @@ class MainWindow(QMainWindow):
 
     def _load_project(self):
         path, _ = QFileDialog.getOpenFileName(
-            self, tr("action.load_project"), "",
-            "ALAS Project (*.alas)"
+            self, tr("action.load_project"), "", "ALAS Project (*.alas)"
         )
         if path:
             try:
@@ -678,28 +394,22 @@ class MainWindow(QMainWindow):
 
     def _on_active_layer_changed(self, index: int):
         entry = self.layer_manager.get_entry(index)
-        if entry and entry.is_point_cloud:
-            self._update_crs_display(entry.layer.crs_epsg)
-        elif entry and entry.is_raster:
+        if entry and (entry.is_point_cloud or entry.is_raster):
             self._update_crs_display(entry.layer.crs_epsg)
 
     def _zoom_to_layer(self, index: int):
         entry = self.layer_manager.get_entry(index)
         if entry:
-            if entry.is_point_cloud:
-                self.viewport.zoom_to_bounds(entry.layer.bounds)
-            elif entry.is_raster:
-                self.viewport.zoom_to_bounds(entry.layer.bounds)
+            self.viewport.zoom_to_bounds(entry.layer.bounds)
             self.viewport.reset_camera()
 
     # ==================================================================
-    # Processing actions (stubs — implemented in dialogs)
+    # Processing actions
     # ==================================================================
 
     def _show_batch_dialog(self):
         from app.ui.dialogs.batch_dialog import BatchProcessingDialog
-        dlg = BatchProcessingDialog(self)
-        dlg.exec()
+        BatchProcessingDialog(self).exec()
 
     def _show_classification_dialog(self):
         from app.ui.dialogs.classification_dialog import ClassificationDialog
@@ -715,23 +425,21 @@ class MainWindow(QMainWindow):
                 entry.layer._hag_cache = None
                 self.viewport.update_colorization(entry.layer, "classification")
                 self._update_status(tr("success.classification_done"))
-                
                 classification_data = dlg.get_classification_data()
                 if classification_data is not None:
                     algo = classification_data.get("algorithm", "unknown")
-                    self._record_classification(algo, classification_data)
-                    
+                    self._measurements.record_classification(algo, classification_data)
                     ground_points = classification_data.get("ground_points", 0)
-                    total_points = classification_data.get("total_points", 0)
-                    
+                    total_points  = classification_data.get("total_points", 0)
                     reply = QMessageBox.question(
-                        self,
-                        tr("class_hist.results_title"),
-                        tr("class_hist.results_message").format(f"{ground_points:,}", f"{total_points:,}"),
+                        self, tr("class_hist.results_title"),
+                        tr("class_hist.results_message").format(
+                            f"{ground_points:,}", f"{total_points:,}"
+                        ),
                         QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
                     )
                     if reply == QMessageBox.StandardButton.Yes:
-                        self._show_classification_history()
+                        self._measurements.show_classification_history()
 
     def _show_dem_dialog(self):
         from app.ui.dialogs.dem_dialog import DEMDialog
@@ -754,7 +462,6 @@ class MainWindow(QMainWindow):
             self._analysis_dialog.setWindowFlags(Qt.WindowType.Window)
         else:
             self._analysis_dialog.set_tab(tab_name)
-            
         self._analysis_dialog.show()
         self._analysis_dialog.raise_()
         self._analysis_dialog.activateWindow()
@@ -786,19 +493,16 @@ class MainWindow(QMainWindow):
         if not entry or not entry.is_point_cloud:
             QMessageBox.information(self, tr("dialog.info"), tr("msg.select_point_cloud"))
             return
-        dlg = CRSDialog(entry.layer, self)
-        dlg.exec()
+        CRSDialog(entry.layer, self).exec()
 
     def _merge_tiles(self):
         clouds = self.layer_manager.get_point_clouds()
         if len(clouds) < 2:
             QMessageBox.information(self, tr("dialog.info"), tr("msg.at_least_2_clouds"))
             return
-
         def _on_result(merged):
             self.layer_manager.add_layer(merged)
             self.viewport.reset_camera()
-
         self._run_processing(PointCloudData.merge, clouds, "merged", on_result=_on_result)
 
     def _filter_noise(self):
@@ -807,7 +511,7 @@ class MainWindow(QMainWindow):
             return
         from app.processing.preprocessing import filter_noise
         self._run_processing(filter_noise, entry.layer,
-                             on_result=lambda result: self.layer_manager.add_layer(result))
+                             on_result=lambda r: self.layer_manager.add_layer(r))
 
     def _decimate_cloud(self):
         entry = self.layer_manager.active_layer
@@ -821,7 +525,7 @@ class MainWindow(QMainWindow):
             return
         from app.processing.preprocessing import decimate
         self._run_processing(decimate, entry.layer,
-                             on_result=lambda result: self.layer_manager.add_layer(result),
+                             on_result=lambda r: self.layer_manager.add_layer(r),
                              voxel_size=voxel)
 
     def _remove_overlap(self):
@@ -830,583 +534,108 @@ class MainWindow(QMainWindow):
             return
         from app.processing.preprocessing import handle_overlap
         self._run_processing(handle_overlap, entry.layer,
-                             on_result=lambda result: self.layer_manager.add_layer(result),
+                             on_result=lambda r: self.layer_manager.add_layer(r),
                              strategy="remove")
 
-    # --- Tools ---
-    def _start_profile_tool(self):
-        logger.info("Profile tool activated")
-        from app.ui.viewport.profile_tool import ProfileDialog
-        
-        if not hasattr(self, "_profile_dialog") or self._profile_dialog is None:
-            self._profile_dialog = ProfileDialog(self.layer_manager, self)
-            
-        entry = self.layer_manager.active_layer
-        if entry and entry.layer.bounds:
-            b = entry.layer.bounds
-            # Pre-fill with a diagonal line across the layer as a starting point
-            if len(b) == 6:
-                self._profile_dialog.set_coordinates(b[0], b[1], b[3], b[4])
-            elif len(b) == 4:
-                self._profile_dialog.set_coordinates(b[0], b[1], b[2], b[3])
-                
-        self._profile_dialog.show()
-        self._profile_dialog.raise_()
-        self._profile_dialog.activateWindow()
-        
-        # Enable point picking for profile
-        self._profile_points = []
-        def on_profile_pick(x, y, z):
-            self._profile_points.append((x, y, z))
-            if len(self._profile_points) == 1:
-                self._update_status(tr("msg.profile_end"))
-            elif len(self._profile_points) == 2:
-                p1, p2 = self._profile_points
-                # Draw final line
-                self.viewport.add_temporary_line(p1, p2, color="#ffff00")
-                
-                self._profile_dialog.set_coordinates(p1[0], p1[1], p2[0], p2[1])
-                self._profile_dialog._on_calculate()
-                self._profile_points = []
-                self._update_status(tr("msg.profile_calculated"))
+    # ==================================================================
+    # Tools — delegated to controllers
+    # ==================================================================
 
-        self.viewport.enable_point_picking(on_profile_pick)
-        self._update_status(tr("msg.profile_start"))
+    def _start_profile_tool(self):
+        self._measurements.start_profile_tool()
 
     def _start_distance_tool(self):
-        """Opens the distance modal and activates the tool in the viewport."""
-        logger.info("Distance tool activated")
-        from app.ui.viewport.distance_tool import DistanceToolDialog
-
-        # Create the dialog the first time
-        if not hasattr(self, "_distance_dialog") or self._distance_dialog is None:
-            self._distance_dialog = DistanceToolDialog(self)
-            self._distance_dialog.calculate_requested.connect(self._calculate_distance)
-            self._distance_dialog.clear_requested.connect(self._on_distance_clear)
-
-        self._distance_dialog.reset()
-        self._distance_dialog.show()
-        self._distance_dialog.raise_()
-        self._distance_dialog.activateWindow()
-
-        # Activate picking in viewport
-        self.viewport.enable_world_picking(self._on_distance_pick)
-        self._update_status(tr("msg.distance_point_a"))
-
-    def _on_distance_pick(self, x: float, y: float, z: float):
-        """Receives each selected point and passes it to the modal."""
-        if not hasattr(self, "_distance_dialog") or self._distance_dialog is None:
-            return
-
-        num_points = len(self._distance_dialog.get_points())
-        if num_points == 0:
-            self._distance_dialog.add_point(x, y, z, "A")
-            self.viewport.add_measurement_marker((x, y, z))
-            self._update_status(tr("msg.distance_point_b"))
-        elif num_points == 1:
-            self._distance_dialog.add_point(x, y, z, "B")
-            self.viewport.add_measurement_marker((x, y, z))
-            # Draw line
-            points = self._distance_dialog.get_points()
-            self.viewport.add_measurement_line(points[0], points[1])
-            # Calculation will be done automatically via signal
-
-    def _on_distance_clear(self):
-        """Clears the viewport when the modal requests reset."""
-        self.viewport.disable_tools()
-        if hasattr(self, "_distance_dialog") and self._distance_dialog is not None and self._distance_dialog.isVisible():
-            self._distance_dialog.reset()
-            self.viewport.enable_world_picking(self._on_distance_pick)
-        self._update_status(tr("status.ready"))
-
-    def _calculate_distance(self):
-        """Calculates the distance between the two points and shows results in the modal."""
-        if not hasattr(self, "_distance_dialog") or self._distance_dialog is None:
-            return
-
-        points = self._distance_dialog.get_points()
-        if len(points) != 2:
-            return
-
-        p1, p2 = points
-        from app.processing.measurements import measure_3d_distance
-        res = measure_3d_distance(p1, p2)
-
-        self._distance_dialog.show_results(
-            res['distance_3d'], res['distance_2d'], res['dz'], res['slope_degrees']
-        )
-
-        self._update_status(
-            tr("status.distance").format(
-                res['distance_3d'], res['distance_2d'], res['dz'], res['slope_degrees']
-            )
-        )
-
-        self._record_measurement("distance", {
-            **res,
-            "ax": p1[0], "ay": p1[1], "az": p1[2],
-            "bx": p2[0], "by": p2[1], "bz": p2[2],
-        })
-
-        logger.info(
-            f"Distance: 3D={res['distance_3d']:.3f}m  "
-            f"2D={res['distance_2d']:.3f}m  dZ={res['dz']:.3f}m"
-        )
-
+        self._measurements.start_distance_tool()
 
     def _start_area_tool(self):
-        """Opens the area modal and activates the tool in the viewport."""
-        logger.info("Area tool activated")
-        from app.ui.viewport.area_tool import AreaToolDialog
-
-        # Create the dialog the first time (or if it was destroyed)
-        if self._area_dialog is None:
-            self._area_dialog = AreaToolDialog(self)
-            self._area_dialog.calculate_requested.connect(self._calculate_area)
-            self._area_dialog.clear_requested.connect(self._on_area_clear)
-            self._area_dialog.undo_requested.connect(self._on_area_undo)
-
-        self._area_dialog.reset()
-        self._area_dialog.show()
-        self._area_dialog.raise_()
-        self._area_dialog.activateWindow()
-
-        # Activate picking in viewport
-        self.viewport.enable_area_tool(on_vertex_added=self._on_area_vertex_added)
-        self._update_status(tr("msg.area_tool"))
-
-    def _on_area_vertex_added(self, x: float, y: float, z: float):
-        """Receives each new vertex from the viewport and passes it to the modal."""
-        if self._area_dialog is not None:
-            self._area_dialog.add_vertex(x, y, z)
-            n = len(self._area_dialog.get_vertices())
-            self._update_status(
-                tr("msg.area_vertices").format(n, "es" if n != 1 else "")
-            )
-
-    def _on_area_clear(self):
-        """Clears the viewport when the modal requests reset."""
-        self.viewport.disable_tools()
-        # Re-activate the tool to continue adding vertices if the dialog is still open
-        if self._area_dialog is not None and self._area_dialog.isVisible():
-            self.viewport.enable_area_tool(on_vertex_added=self._on_area_vertex_added)
-        self._update_status(tr("status.ready"))
-
-    def _on_area_undo(self, vertices: list):
-        """Redraw the remaining vertices after undo."""
-        self.viewport.disable_tools()
-        if self._area_dialog is not None and self._area_dialog.isVisible():
-            self.viewport.enable_area_tool(on_vertex_added=self._on_area_vertex_added)
-            # Redraw the remaining vertices
-            for v in vertices:
-                self.viewport.add_measurement_marker(v)
-            # Redraw lines between consecutive vertices
-            for i in range(len(vertices) - 1):
-                self.viewport.add_measurement_line(vertices[i], vertices[i + 1])
-        n = len(vertices)
-        self._update_status(
-            tr("msg.area_vertices").format(n, "es" if n != 1 else "")
-        )
-
-    def _calculate_area(self):
-        """Calculate the polygon area and show results in the modal."""
-        if self._area_dialog is None:
-            return
-
-        vertices = self._area_dialog.get_vertices()
-        if len(vertices) < 3:
-            return
-
-        self.viewport.draw_closing_line()
-
-        pts = np.array(vertices)
-        diffs = np.diff(pts[:, :2], axis=0)
-        seg_lengths = np.sqrt((diffs ** 2).sum(axis=1))
-        closing = np.sqrt(
-            (pts[-1, 0] - pts[0, 0]) ** 2 + (pts[-1, 1] - pts[0, 1]) ** 2
-        )
-        perimeter = float(seg_lengths.sum() + closing)
-
-        rasters = [e for e in self.layer_manager.get_all_entries() if e.is_raster]
-
-        if rasters:
-            from app.processing.measurements import measure_area
-            polygon_xy = pts[:, :2]
-            raster_layer = rasters[0].layer
-
-            def _on_area_result(res):
-                self._finish_area_calculation(
-                    vertices, res["planimetric_area_m2"], res["surface_area_m2"],
-                    perimeter, True
-                )
-
-            def _on_area_error(e):
-                logger.error(f"Error calculating area with DEM: {e}")
-                fallback = self._shoelace_area(pts[:, :2])
-                self._finish_area_calculation(vertices, fallback, fallback, perimeter, False)
-
-            self._run_processing(
-                measure_area, raster_layer, polygon_xy,
-                on_result=_on_area_result,
-                on_error=_on_area_error,
-            )
-        else:
-            plan_m2 = self._shoelace_area(pts[:, :2])
-            self._finish_area_calculation(vertices, plan_m2, plan_m2, perimeter, False)
-
-    def _finish_area_calculation(self, vertices, plan_m2, surf_m2, perimeter, used_raster):
-        if self._area_dialog is None:
-            return
-        self._area_dialog.show_results(
-            plan_m2=plan_m2,
-            surf_m2=surf_m2,
-            perimeter_m=perimeter,
-            used_raster=used_raster,
-        )
-        self._update_status(tr("msg.area_calculated").format(plan_m2, perimeter))
-        logger.info(
-            f"Area: plan={plan_m2:.2f}m² surf={surf_m2:.2f}m² "
-            f"per={perimeter:.2f}m verts={len(vertices)}"
-        )
-        verts_as_dicts = [{"x": v[0], "y": v[1], "z": v[2]} for v in vertices]
-        self._record_measurement("area", {
-            "planimetric_area_m2": plan_m2,
-            "surface_area_m2":     surf_m2,
-            "perimeter_m":         perimeter,
-            "used_raster":         used_raster,
-            "num_vertices":        len(vertices),
-            "vertices":            verts_as_dicts,
-        })
-
-    @staticmethod
-    def _shoelace_area(pts: np.ndarray) -> float:
-        """Shoelace formula for planimetric area (without DEM)."""
-        x, y = pts[:, 0], pts[:, 1]
-        return float(abs(np.dot(x, np.roll(y, -1)) - np.dot(y, np.roll(x, -1))) / 2.0)
+        self._measurements.start_area_tool()
 
     def _start_volume_tool(self):
-        """Open the volume modal and activate the tool in the viewport."""
-        logger.info("Volume tool activated")
-        from app.ui.viewport.volume_tool import VolumeToolDialog
-
-        if not hasattr(self, "_volume_dialog") or self._volume_dialog is None:
-            self._volume_dialog = VolumeToolDialog(self)
-            self._volume_dialog.calculate_requested.connect(self._calculate_volume)
-            self._volume_dialog.clear_requested.connect(self._on_volume_clear)
-            self._volume_dialog.clear_volume_requested.connect(self._on_volume_clear_only_solid)
-
-        self._volume_dialog.reset()
-        self._volume_dialog.show()
-        self._volume_dialog.raise_()
-        self._volume_dialog.activateWindow()
-
-        # Activate picking in viewport (reuses area picking)
-        self.viewport.enable_area_tool(on_vertex_added=self._on_volume_vertex_added)
-        self._update_status(tr("msg.volume_tool_active"))
-
-    def _on_volume_vertex_added(self, x: float, y: float, z: float):
-        """Receive each new vertex from the viewport and pass it to the modal."""
-        if hasattr(self, "_volume_dialog") and self._volume_dialog is not None:
-            self._volume_dialog.add_vertex(x, y, z)
-            n = len(self._volume_dialog.get_vertices())
-            self._update_status(
-                tr("msg.volume_vertices").format(n, "es" if n != 1 else "")
-            )
-
-    def _on_volume_clear_only_solid(self):
-        """Clear only the 3D volume (to test other elevations without redoing the polygon)."""
-        self.viewport.clear_volume_graphics()
-        self._update_status(tr("msg.volume_cleared"))
-
-    def _on_volume_clear(self):
-        """Clear the viewport when the modal requests reset."""
-        self.viewport.disable_tools()
-        if hasattr(self, "_volume_dialog") and self._volume_dialog is not None and self._volume_dialog.isVisible():
-            self.viewport.enable_area_tool(on_vertex_added=self._on_volume_vertex_added)
-        self._update_status(tr("status.ready"))
-
-    def _calculate_volume(self):
-        """Calculate the polygon volume and show results in the modal."""
-        if not hasattr(self, "_volume_dialog") or self._volume_dialog is None:
-            return
-
-        vertices = self._volume_dialog.get_vertices()
-        if len(vertices) < 3:
-            return
-
-        z_ref = self._volume_dialog.get_reference_z()
-        self.viewport.draw_closing_line()
-
-        rasters = [e for e in self.layer_manager.get_all_entries() if e.is_raster]
-        if not rasters:
-            self._volume_dialog.show_error(tr("msg.volume_no_dem"))
-            return
-
-        from app.processing.measurements import calculate_volume
-        raster_layer = rasters[0].layer
-        polygon_xy = np.array(vertices)[:, :2]
-
-        def _do_volume():
-            return calculate_volume(raster_layer, z_ref, polygon_xy)
-
-        def _on_volume_result(res):
-            if not hasattr(self, "_volume_dialog") or self._volume_dialog is None:
-                return
-            self._volume_dialog.show_results(
-                res['cut_volume_m3'], res['fill_volume_m3'],
-                res['net_volume_m3'], res['area_m2']
-            )
-            self._update_status(tr("msg.volume_calculated").format(res['net_volume_m3'], z_ref))
-            if 'grid_x' in res:
-                self.viewport.display_volume_region(
-                    res['grid_x'], res['grid_y'], res['grid_z'], z_ref
-                )
-            hist_data = {k: v for k, v in res.items() if k not in ('grid_x', 'grid_y', 'grid_z')}
-            verts_as_dicts = [{"x": v[0], "y": v[1], "z": v[2]} for v in vertices]
-            self._record_measurement("volume", {
-                **hist_data,
-                "reference_z": z_ref,
-                "num_vertices": len(vertices),
-                "vertices": verts_as_dicts,
-            })
-
-        def _on_volume_error(e):
-            logger.error(f"Error calculating volume: {e}")
-            if hasattr(self, "_volume_dialog") and self._volume_dialog is not None:
-                self._volume_dialog.show_error(f"Error: {e}")
-
-        self._run_processing(_do_volume, on_result=_on_volume_result, on_error=_on_volume_error)
-
-    # --- Measurements history ---
-    def _get_measurements_dialog(self):
-        """Create the history dialog the first time (lazy)."""
-        if self._measurements_dialog is None:
-            from app.ui.dialogs.measurements_history_dialog import MeasurementsHistoryDialog
-            self._measurements_dialog = MeasurementsHistoryDialog(self)
-        return self._measurements_dialog
+        self._measurements.start_volume_tool()
 
     def _show_measurements_history(self):
-        """Open the measurements history modal."""
-        dlg = self._get_measurements_dialog()
-        dlg.show_and_raise()
-
-    def _record_measurement(self, mtype: str, data: dict):
-        """Save a measurement to history (does not open the modal)."""
-        dlg = self._get_measurements_dialog()
-        dlg.add_measurement(mtype, data)
-        logger.info(f"Measurement '{mtype}' registered in history.")
-
-    # --- Geometric figures tool ---
-    def _show_figures_tool(self):
-        from app.ui.viewport.figures_tool import FiguresToolDialog
-        if self._figures_dialog is None:
-            self._figures_dialog = FiguresToolDialog(self)
-            self._figures_dialog.place_requested.connect(self._on_figure_place_requested)
-            self._figures_dialog.update_requested.connect(self._on_figure_update_requested)
-        self._figures_dialog.show()
-        self._figures_dialog.raise_()
-        self._figures_dialog.activateWindow()
-
-    def _get_figures_history_dialog(self):
-        if self._figures_history_dialog is None:
-            from app.ui.dialogs.figures_history_dialog import FiguresHistoryDialog
-            self._figures_history_dialog = FiguresHistoryDialog(self)
-            self._figures_history_dialog.remove_requested.connect(self._on_figure_remove_requested)
-            self._figures_history_dialog.clear_all_requested.connect(self._on_figures_clear_all)
-        return self._figures_history_dialog
-
-    def _show_figures_history(self):
-        self._get_figures_history_dialog().show_and_raise()
-
-    def _on_figure_place_requested(self, ftype: str, params: dict):
-        self._pending_figure = (ftype, dict(params))
-        self.viewport.enable_world_picking(self._on_figure_world_pick)
-        self._update_status(tr("fig.status_pick"))
-
-    def _on_figure_world_pick(self, x: float, y: float, z: float):
-        if not hasattr(self, "_pending_figure") or self._pending_figure is None:
-            return
-        ftype, params = self._pending_figure
-        self._pending_figure = None
-        self.viewport.disable_tools()
-
-        from app.ui.viewport.figures_tool import params_summary
-        dlg = self._get_figures_history_dialog()
-        entry = dlg.add_figure(ftype, (x, y, z), params)
-        self._figure_actor_names[entry.id] = entry.actor_name
-        self._figure_entries = getattr(self, "_figure_entries", {})
-        self._figure_entries[entry.id] = {"ftype": ftype, "center": (x, y, z), "params": dict(params)}
-        try:
-            self.viewport.add_figure(ftype, (x, y, z), params, entry.actor_name)
-        except Exception as e:
-            logger.error(f"Failed to place figure: {e}")
-            QMessageBox.warning(self, tr("fig.title"), str(e))
-            return
-        self.viewport.register_figure_id(entry.actor_name, entry.id)
-        self.layer_panel.add_figure_item(entry.id, ftype, params_summary(ftype, params))
-        # Arm dragging the first time a figure exists
-        self.viewport.enable_figure_dragging(self._on_figure_dragged)
-        self._update_status(tr("fig.status_placed").format(x, y, z))
-        logger.info(f"Figure #{entry.id} ({ftype}) placed at ({x:.3f}, {y:.3f}, {z:.3f})")
-
-    def _on_figure_update_requested(self, figure_id: int, ftype: str,
-                                     new_center: tuple, new_params: dict):
-        from app.ui.viewport.figures_tool import params_summary
-        self._figure_entries = getattr(self, "_figure_entries", {})
-        info = self._figure_entries.get(figure_id)
-        name = self._figure_actor_names.get(figure_id)
-        if info is None or name is None:
-            return
-        info["params"] = dict(new_params)
-        info["center"] = tuple(new_center)
-        try:
-            self.viewport.update_figure(ftype, new_center, new_params, name)
-            # Keep figure meta center in sync so drag works from the new position
-            if name in self.viewport._figure_meta:
-                ft, _, p = self.viewport._figure_meta[name]
-                self.viewport._figure_meta[name] = (ft, list(new_center), p)
-        except Exception as e:
-            logger.error(f"Failed to update figure: {e}")
-            return
-        self.layer_panel.update_figure_item(figure_id, ftype,
-                                            params_summary(ftype, new_params))
-        if self._figures_history_dialog is not None:
-            self._figures_history_dialog.update_entry(figure_id, new_params)
-            self._figures_history_dialog.update_entry_center(figure_id, new_center)
-        logger.info(f"Figure #{figure_id} updated: center={new_center} params={new_params}")
-
-    def _on_figure_edit_from_layer(self, figure_id: int):
-        self._figure_entries = getattr(self, "_figure_entries", {})
-        info = self._figure_entries.get(figure_id)
-        if info is None:
-            return
-        self._show_figures_tool()
-        self._figures_dialog.load_figure(
-            figure_id, info["ftype"], info["center"], info["params"]
-        )
-
-    def _on_figure_dragged(self, figure_id: int, x: float, y: float, z: float):
-        """Called by viewport after a drag is released; updates all tracked state."""
-        from app.ui.viewport.figures_tool import params_summary
-        self._figure_entries = getattr(self, "_figure_entries", {})
-        info = self._figure_entries.get(figure_id)
-        if info is None:
-            return
-        info["center"] = (x, y, z)
-        if self._figures_history_dialog is not None:
-            self._figures_history_dialog.update_entry_center(figure_id, (x, y, z))
-        self.layer_panel.update_figure_item(
-            figure_id, info["ftype"],
-            params_summary(info["ftype"], info["params"])
-        )
-        # Keep coordinate fields in the edit dialog current if it's open for this figure
-        if (self._figures_dialog is not None
-                and getattr(self._figures_dialog, "_edit_id", None) == figure_id):
-            self._figures_dialog.update_center_display((x, y, z))
-        logger.info(f"Figure #{figure_id} dragged to ({x:.3f}, {y:.3f}, {z:.3f})")
-
-    def _on_figure_remove_requested(self, figure_id: int):
-        """Remove a figure — called from the history dialog."""
-        self._remove_figure(figure_id)
-
-    def _on_figure_remove_from_layer(self, figure_id: int):
-        """Remove a figure — called from the layer panel context menu."""
-        self._remove_figure(figure_id)
-        if self._figures_history_dialog is not None:
-            self._figures_history_dialog.remove_entry(figure_id)
-
-    def _remove_figure(self, figure_id: int):
-        name = self._figure_actor_names.pop(figure_id, None)
-        self._figure_entries = getattr(self, "_figure_entries", {})
-        self._figure_entries.pop(figure_id, None)
-        if name:
-            self.viewport.unregister_figure(name)
-            self.viewport.remove_layer(name)
-        self.layer_panel.remove_figure_item(figure_id)
-        # Exit edit mode if this figure was being edited
-        if (self._figures_dialog is not None
-                and getattr(self._figures_dialog, "_edit_id", None) == figure_id):
-            self._figures_dialog._exit_edit_mode()
-        if not self._figure_actor_names:
-            self.viewport.disable_figure_dragging()
-
-    def _on_figures_clear_all(self):
-        for name in list(self._figure_actor_names.values()):
-            self.viewport.unregister_figure(name)
-            self.viewport.remove_layer(name)
-        self._figure_actor_names.clear()
-        self._figure_entries = {}
-        self.layer_panel.clear_figure_items()
-        self.viewport.disable_figure_dragging()
-
-    # --- Classification history ---
-    def _get_classification_history_dialog(self):
-        """Create the classification history dialog the first time (lazy)."""
-        if self._classification_history_dialog is None:
-            from app.ui.dialogs.classification_history_dialog import ClassificationHistoryDialog
-            self._classification_history_dialog = ClassificationHistoryDialog(self)
-        return self._classification_history_dialog
+        self._measurements.show_measurements_history()
 
     def _show_classification_history(self):
-        """Open the classification history modal."""
-        dlg = self._get_classification_history_dialog()
-        dlg.show_and_raise()
+        self._measurements.show_classification_history()
 
     def _record_classification(self, algo: str, data: dict):
-        """Save a classification to history (does not open the modal)."""
-        dlg = self._get_classification_history_dialog()
-        dlg.add_classification(algo, data)
-        logger.info(f"Classification '{algo}' registered in history.")
+        self._measurements.record_classification(algo, data)
 
-    # --- Flythrough ---
+    def _show_figures_tool(self):
+        self._figures.show_figures_tool()
+
+    def _show_figures_history(self):
+        self._figures.show_figures_history()
+
+    def _start_annotations_tool(self):
+        self._annotations.start_tool()
+
+    # ==================================================================
+    # Coordinate Picker
+    # ==================================================================
+
+    def _start_coordinate_picker(self):
+        logger.info("Coordinate picker activated")
+        from app.ui.viewport.coordinate_picker import CoordinatePickerDialog
+        if self._coord_picker_dialog is None:
+            self._coord_picker_dialog = CoordinatePickerDialog(self)
+        self._coord_picker_dialog.show()
+        self._coord_picker_dialog.raise_()
+        self._coord_picker_dialog.activateWindow()
+
+        def _on_pick(x, y, z):
+            self._coord_picker_dialog.update_coords(x, y, z)
+            self._update_status(tr("coord.status").format(x, y, z))
+
+        self.viewport.enable_world_picking(_on_pick)
+        self._update_status(tr("coord.instructions"))
+
+    # ==================================================================
+    # Help / info dialogs
+    # ==================================================================
+
     def _show_flythrough_dialog(self):
         from app.ui.dialogs.flythrough_dialog import FlythroughDialog
-        dlg = FlythroughDialog(self.layer_manager, self.viewport, self)
-        dlg.exec()
+        FlythroughDialog(self.layer_manager, self.viewport, self).exec()
 
-    # --- Export ---
     def _show_export_dialog(self):
         from app.ui.dialogs.export_dialog import ExportDialog
-        dlg = ExportDialog(self.layer_manager, self)
-        dlg.exec()
+        ExportDialog(self.layer_manager, self).exec()
 
     def _export_layer(self, index: int):
         entry = self.layer_manager.get_entry(index)
         if not entry:
             return
         from app.ui.dialogs.export_dialog import ExportDialog
-        dlg = ExportDialog(self.layer_manager, self, preset_layer=index)
-        dlg.exec()
+        ExportDialog(self.layer_manager, self, preset_layer=index).exec()
 
-    # --- About ---
     def _show_tutorial(self):
         from app.ui.dialogs.tutorial_dialog import TutorialDialog
-        dlg = TutorialDialog(self)
-        dlg.exec()
+        TutorialDialog(self).exec()
 
     def _show_shortcuts(self):
         from app.ui.dialogs.tutorial_dialog import ShortcutsDialog
-        dlg = ShortcutsDialog(self)
-        dlg.exec()
+        ShortcutsDialog(self).exec()
 
     def _show_glossary(self):
         from app.ui.dialogs.tutorial_dialog import GlossaryDialog
-        dlg = GlossaryDialog(self)
-        dlg.exec()
+        GlossaryDialog(self).exec()
 
     def _show_about(self):
         from app.ui.dialogs.about_dialog import AboutDialog
-        dlg = AboutDialog(self)
-        dlg.exec()
+        AboutDialog(self).exec()
 
-    # --- Profile ---
+    # ==================================================================
+    # Auth / profile / settings
+    # ==================================================================
+
     def _show_profile(self):
         if not self._current_user:
             QMessageBox.information(self, tr("dialog.info"), tr("auth.my_account"))
             return
         self._show_user_panel()
 
-    # --- Settings ---
     def _show_settings(self):
         from app.ui.dialogs.settings_dialog import SettingsDialog
         dlg = SettingsDialog(self.preferences, self)
@@ -1422,7 +651,6 @@ class MainWindow(QMainWindow):
             self.viewport.set_point_size(pt)
         self.preferences.set("language", values.get("language", "es"))
 
-    # --- Login gate ---
     def showEvent(self, event):
         super().showEvent(event)
         if not self._login_shown:
@@ -1444,7 +672,6 @@ class MainWindow(QMainWindow):
         self._user_btn.setIconSize(QSize(26, 26))
         self._user_btn.setVisible(True)
 
-    # --- User panel ---
     def _show_user_panel(self):
         if not self._current_user:
             return
@@ -1458,11 +685,10 @@ class MainWindow(QMainWindow):
         if self._session_token:
             auth_logout(self._session_token)
         self.preferences.set("session_token", None)
-        import os, sys
+        import sys
         self.close()
         os.execv(sys.executable, [sys.executable] + sys.argv)
 
-    # --- Language ---
     def _change_language(self, lang: str):
         set_language(lang)
         self.preferences.set("language", lang)

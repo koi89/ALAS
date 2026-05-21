@@ -4,6 +4,7 @@ Shared base class and history-dialog helper used by every analysis tab widget.
 """
 
 from __future__ import annotations
+import shutil
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QPushButton, QMessageBox,
@@ -139,9 +140,12 @@ def show_history_dialog(
             tr("analysis.history_layers"): str(len(res)),
         }
         stats = _collect_statistics(res)
-        analysis_results, _tmp = results_window_class.render_for_pdf(res)
-        export_pdf_report(tr(pdf_title_key), metadata, stats, [], path,
-                          analysis_results=analysis_results)
+        analysis_results, tmp_dir = results_window_class.render_for_pdf(res)
+        try:
+            export_pdf_report(tr(pdf_title_key), metadata, stats, [], path,
+                              analysis_results=analysis_results)
+        finally:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
         QMessageBox.information(
             dlg, tr("export.success"), f"{tr('export.exported_message')} {path}"
         )
@@ -198,7 +202,7 @@ def show_history_dialog(
             tr("analysis.history_layers"): str(len(res)),
         }
         stats = _collect_statistics(res)
-        analysis_results, _tmp = results_window_class.render_for_pdf(res)
+        analysis_results, tmp_dir = results_window_class.render_for_pdf(res)
 
         btn_save.setEnabled(False)
         user_id = user.id
