@@ -23,9 +23,9 @@ logger = get_logger("ui.license_dialog")
 class LicenseDialog(QDialog):
     """Modal license gate. self.license is set on accept()."""
 
-    def __init__(self, user_id: int, parent=None):
+    def __init__(self, token: str, parent=None):
         super().__init__(parent)
-        self.user_id = user_id
+        self.token = token
         self.machine_id = get_machine_id()
         self.license: LicenseStatus | None = None
 
@@ -108,7 +108,7 @@ class LicenseDialog(QDialog):
         self._set_enabled(False)
         QApplication.processEvents()
 
-        result = activate_license(self.user_id, key, self.machine_id)
+        result = activate_license(self.token, key, self.machine_id)
         self._set_enabled(True)
 
         if isinstance(result, str):

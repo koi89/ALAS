@@ -484,7 +484,7 @@ class MainWindow(QMainWindow):
             return
         if not hasattr(self, "_reports_dialog") or self._reports_dialog is None:
             from app.ui.dialogs.reports_dialog import ReportsDialog
-            self._reports_dialog = ReportsDialog(self._current_user, self)
+            self._reports_dialog = ReportsDialog(self._current_user, self._session_token, self)
         self._reports_dialog.show_and_raise()
 
     def _show_reproject_dialog(self):
@@ -671,7 +671,7 @@ class MainWindow(QMainWindow):
             return
         self._current_user = dlg.user
         self._session_token = dlg.session_token
-        if self._session_token:
+        if self._session_token and getattr(dlg, "persist_token", False):
             self.preferences.set("session_token", self._session_token)
         self._user_btn.setIcon(QIcon(self._make_avatar_pixmap(self._current_user.full_name)))
         self._user_btn.setIconSize(QSize(26, 26))
@@ -681,11 +681,16 @@ class MainWindow(QMainWindow):
         from app.auth.license_service import verify_license, get_machine_id
         from app.ui.dialogs.license_dialog import LicenseDialog
 
-        machine_id = get_machine_id()
-        if verify_license(self._current_user.id, machine_id):
+        if not self._session_token:
+            QMessageBox.critical(self, "ALAS", tr("license.error_processing_failed"))
+            QApplication.quit()
             return
 
-        dlg = LicenseDialog(self._current_user.id, self)
+        machine_id = get_machine_id()
+        if verify_license(self._session_token, machine_id):
+            return
+
+        dlg = LicenseDialog(self._session_token, self)
         if dlg.exec() != QDialog.DialogCode.Accepted or dlg.license is None:
             QApplication.quit()
 
@@ -693,7 +698,7 @@ class MainWindow(QMainWindow):
         if not self._current_user:
             return
         from app.ui.dialogs.user_panel import UserPanelDialog
-        panel = UserPanelDialog(self._current_user, self)
+        panel = UserPanelDialog(self._current_user, self._session_token, self)
         panel.logout_requested.connect(self._on_logout)
         panel.exec()
 

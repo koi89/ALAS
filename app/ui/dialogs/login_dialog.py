@@ -23,6 +23,7 @@ class LoginDialog(QDialog):
         super().__init__(parent)
         self.user = None
         self.session_token = None
+        self.persist_token = False
 
         self.setWindowTitle("ALAS")
         self.setFixedSize(400, 460)
@@ -130,6 +131,7 @@ class LoginDialog(QDialog):
                 self._set_login_enabled(True)
                 return
             self.user, self.session_token = result
+            self.persist_token = remember_me
             logger.info(f"Login OK: {email}")
             self.accept()
 
