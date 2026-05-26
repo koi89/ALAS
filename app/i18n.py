@@ -723,6 +723,19 @@ _TRANSLATIONS = {
     "auth.billing_annual":               {"es": "Anual",                     "en": "Annual"},
     "auth.billing_lifetime":             {"es": "De por vida",               "en": "Lifetime"},
 
+    # --- License gate ---
+    "license.title":                    {"es": "Licencia requerida",        "en": "License required"},
+    "license.subtitle":                 {"es": "Introduce tu clave de licencia para activar este dispositivo.", "en": "Enter your license key to activate this device."},
+    "license.activate":                 {"es": "Activar",                   "en": "Activate"},
+    "license.quit":                     {"es": "Salir",                     "en": "Quit"},
+    "license.error_empty_key":          {"es": "Introduce una clave de licencia.", "en": "Enter a license key."},
+    "license.error_invalid_key":        {"es": "Clave de licencia no encontrada.", "en": "License key not found."},
+    "license.error_not_owner":          {"es": "Esta clave pertenece a otra cuenta.", "en": "This key belongs to another account."},
+    "license.error_inactive":           {"es": "La licencia no está activa.", "en": "License is not active."},
+    "license.error_expired":            {"es": "La licencia ha expirado.",  "en": "License has expired."},
+    "license.error_device_limit":       {"es": "Límite de dispositivos alcanzado para esta licencia.", "en": "Device limit reached for this license."},
+    "license.error_processing_failed":  {"es": "Error de conexión. Inténtalo de nuevo.", "en": "Connection error. Please try again."},
+
     # --- More menu ---
     "menu.more": {"es": "Más", "en": "More"},
     "action.my_profile": {"es": "Mi perfil", "en": "My profile"},

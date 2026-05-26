@@ -655,8 +655,13 @@ class MainWindow(QMainWindow):
         super().showEvent(event)
         if not self._login_shown:
             self._login_shown = True
-            if not self._current_user:
-                QTimer.singleShot(0, self._ensure_logged_in)
+            QTimer.singleShot(0, self._ensure_gated)
+
+    def _ensure_gated(self):
+        if not self._current_user:
+            self._ensure_logged_in()
+        if self._current_user:
+            self._ensure_licensed()
 
     def _ensure_logged_in(self):
         from app.ui.dialogs.login_dialog import LoginDialog
@@ -671,6 +676,18 @@ class MainWindow(QMainWindow):
         self._user_btn.setIcon(QIcon(self._make_avatar_pixmap(self._current_user.full_name)))
         self._user_btn.setIconSize(QSize(26, 26))
         self._user_btn.setVisible(True)
+
+    def _ensure_licensed(self):
+        from app.auth.license_service import verify_license, get_machine_id
+        from app.ui.dialogs.license_dialog import LicenseDialog
+
+        machine_id = get_machine_id()
+        if verify_license(self._current_user.id, machine_id):
+            return
+
+        dlg = LicenseDialog(self._current_user.id, self)
+        if dlg.exec() != QDialog.DialogCode.Accepted or dlg.license is None:
+            QApplication.quit()
 
     def _show_user_panel(self):
         if not self._current_user:
