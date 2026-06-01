@@ -1,13 +1,12 @@
 """
 ALAS — Analysis Reports Dialog
-Manage saved PDF analysis reports stored in NeonDB.
+Manage saved PDF analysis reports via the Laravel backend API.
 """
 
 from __future__ import annotations
 import os
 import subprocess
 import sys
-import uuid
 from pathlib import Path
 from typing import List, Optional
 
@@ -26,26 +25,6 @@ from app.processing.workers import ProcessingWorker
 from app.ui.widgets import LoadingOverlay
 
 logger = get_logger("ui.reports_dialog")
-
-
-def _web_storage_root() -> Path:
-    """Root of the Laravel `local` disk (storage/app/private)."""
-    return Path(os.environ.get("ALAS_WEB_STORAGE_ROOT", "")).expanduser()
-
-
-def _resolve_disk_path(disk_path: str) -> Path:
-    """
-    Resolve a stored `disk_path` to an absolute filesystem path.
-
-    Relative paths are interpreted as Laravel disk-relative (e.g.
-    "reports/12/abcd.pdf") and joined to ALAS_WEB_STORAGE_ROOT.
-    Absolute paths from legacy rows are kept as-is.
-    """
-    p = Path(disk_path)
-    if p.is_absolute():
-        return p
-    root = _web_storage_root()
-    return (root / disk_path) if root else p
 
 
 def _open_pdf(path: str):
@@ -69,9 +48,10 @@ def _open_pdf(path: str):
 class ReportsDialog(QDialog):
     """Dialog for browsing, uploading, and managing saved analysis PDF reports."""
 
-    def __init__(self, user, parent=None):
+    def __init__(self, user, session_token: str | None = None, parent=None):
         super().__init__(parent, Qt.WindowType.Window)
         self._user = user
+        self._token = session_token
         self.setWindowTitle(tr("reports.title"))
         self.setMinimumSize(780, 500)
         self.resize(920, 560)
@@ -331,11 +311,11 @@ class ReportsDialog(QDialog):
         self._set_busy(True)
         self._count_label.setText(tr("reports.loading") if tr("reports.loading") != "reports.loading" else "…")
 
-        user_id = self._user.id
+        token = self._token
 
         def fetch():
             from app.auth.reports_service import get_user_reports
-            return get_user_reports(user_id)
+            return get_user_reports(token)
 
         def on_result(reports):
             self._reports = reports
@@ -409,14 +389,8 @@ class ReportsDialog(QDialog):
             )
 
     def _upload_pdf(self):
-        if not self._user:
+        if not self._user or not self._token:
             QMessageBox.warning(self, tr("reports.title"), tr("reports.no_user"))
-            return
-
-        root = _web_storage_root()
-        if not root or not root.exists():
-            logger.error(f"ALAS_WEB_STORAGE_ROOT missing or unreachable: {root}")
-            QMessageBox.critical(self, tr("reports.title"), tr("reports.error_save"))
             return
 
         path, _ = QFileDialog.getOpenFileName(
@@ -435,25 +409,15 @@ class ReportsDialog(QDialog):
         if not ok or not title.strip():
             return
 
-        user_id = self._user.id
-        suffix = src.suffix or ".pdf"
-        rel_disk_path = f"reports/{user_id}/{uuid.uuid4().hex}{suffix}"
-        dest = root / rel_disk_path
-        dest.parent.mkdir(parents=True, exist_ok=True)
-
-        import shutil
-        shutil.copy2(src, dest)
-        size_bytes = dest.stat().st_size
-        original_name = src.name
-
         self._set_busy(True)
         final_title = title.strip()
+        token = self._token
+        src_str = str(src)
+        original_name = src.name
 
         def save():
-            from app.auth.reports_service import save_report
-            return save_report(
-                user_id, final_title, rel_disk_path, original_name, size_bytes
-            )
+            from app.auth.reports_service import upload_report
+            return upload_report(token, final_title, src_str, filename=original_name)
 
         def on_result(result):
             self._set_busy(False)
@@ -472,14 +436,26 @@ class ReportsDialog(QDialog):
 
     def _view_report(self):
         report = self._selected_report()
-        if not report:
+        if not report or not self._token:
             return
-        full = _resolve_disk_path(report.disk_path)
-        if not full.exists():
+        self._set_busy(True)
+        token = self._token
+
+        def fetch():
+            from app.auth.reports_service import download_report
+            return download_report(token, report)
+
+        def on_result(local_path):
+            self._set_busy(False)
+            if not local_path or not _open_pdf(str(local_path)):
+                QMessageBox.warning(self, tr("reports.title"), tr("reports.file_missing"))
+
+        def on_error(msg):
+            self._set_busy(False)
+            logger.error(f"View report failed: {msg}")
             QMessageBox.warning(self, tr("reports.title"), tr("reports.file_missing"))
-            return
-        if not _open_pdf(str(full)):
-            QMessageBox.warning(self, tr("reports.title"), tr("reports.file_missing"))
+
+        self._run_in_thread(fetch, on_result=on_result, on_error=on_error)
 
     def _toggle_share(self):
         report = self._selected_report()
@@ -487,11 +463,11 @@ class ReportsDialog(QDialog):
             return
         self._set_busy(True)
         report_id = report.id
-        user_id = self._user.id
+        token = self._token
 
         def toggle():
             from app.auth.reports_service import toggle_share
-            return toggle_share(report_id, user_id)
+            return toggle_share(token, report_id)
 
         def on_result(new_token):
             self._set_busy(False)
@@ -524,11 +500,11 @@ class ReportsDialog(QDialog):
 
         self._set_busy(True)
         report_id = report.id
-        user_id = self._user.id
+        token = self._token
 
         def delete():
             from app.auth.reports_service import delete_report
-            return delete_report(report_id, user_id)
+            return delete_report(token, report_id)
 
         def on_result(ok):
             self._set_busy(False)
