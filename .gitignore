@@ -3,3 +3,11 @@ __pycache__/
 *$py.class
 .claude
 .env
+
+# PyInstaller
+build/
+dist/
+*.spec.bak
+
+# Inno Setup
+installer_output/

@@ -33,6 +33,7 @@ dependencies:
   - pytorch::pytorch
   # --- Misc ---
   - reportlab
+  - pyinstaller
   - pip
   - pip:
       - PyQt6==6.7.1

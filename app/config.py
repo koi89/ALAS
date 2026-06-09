@@ -4,13 +4,15 @@ Global constants, ASPRS codes, color palettes, file filters.
 """
 
 import os
+import sys
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
 APP_DIR = Path(__file__).resolve().parent
-ROOT_DIR = APP_DIR.parent
+# When frozen by PyInstaller, bundled data lives under sys._MEIPASS
+ROOT_DIR = Path(getattr(sys, "_MEIPASS", APP_DIR.parent))
 RESOURCES_DIR = ROOT_DIR / "resources"
 ICONS_DIR = RESOURCES_DIR / "icons"
 STYLES_DIR = RESOURCES_DIR / "styles"
