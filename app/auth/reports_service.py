@@ -1,16 +1,20 @@
 """
 ALAS — Analysis Reports Service
-CRUD for the analysis_reports table on NeonDB.
+Talks to the Laravel desktop API for listing, uploading, sharing, and deleting
+PDF analysis reports. PDF bytes are uploaded via multipart — no shared
+filesystem access required.
 """
 
 from __future__ import annotations
-import uuid
+
 import datetime
+import os
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, List
+from typing import List, Optional
 
-from app.auth.db import get_connection
+from app.auth.api_client import ApiError, request
 from app.logger import get_logger
 
 logger = get_logger("auth.reports_service")
@@ -22,11 +26,10 @@ class AnalysisReport:
     user_id: int
     title: str
     filename: str
-    disk_path: str
     size_bytes: int
     share_token: Optional[str]
-    created_at: datetime.datetime
-    updated_at: datetime.datetime
+    created_at: Optional[datetime.datetime]
+    updated_at: Optional[datetime.datetime]
 
     def is_shared(self) -> bool:
         return self.share_token is not None
@@ -41,120 +44,122 @@ class AnalysisReport:
 
     @property
     def date_str(self) -> str:
-        if self.created_at:
-            import datetime
-            local_dt = self.created_at.astimezone(datetime.timezone.utc).astimezone()
-            return local_dt.strftime("%d/%m/%Y %H:%M")
-        return "—"
+        if not self.created_at:
+            return "—"
+        local_dt = self.created_at.astimezone(datetime.timezone.utc).astimezone()
+        return local_dt.strftime("%d/%m/%Y %H:%M")
 
 
-def save_report(
-    user_id: int,
+def upload_report(
+    token: str,
     title: str,
-    disk_path: str,
-    filename: str,
-    size_bytes: int,
+    pdf_path: str | Path,
+    filename: Optional[str] = None,
 ) -> AnalysisReport | str:
-    """
-    Persist a PDF report row to DB.
+    """Upload a PDF + metadata to the Laravel API."""
+    p = Path(pdf_path)
+    if not p.exists():
+        return "reports.error_save_failed"
+    name = filename or p.name
 
-    `disk_path` is stored verbatim and is expected to be the path Laravel's
-    `Storage::disk('local')` would record, i.e. relative to the Laravel
-    local-disk root (e.g. "reports/12/abcd1234.pdf"). The caller is
-    responsible for having already written the bytes to that location.
-    """
     try:
-        conn = get_connection()
-        with conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    INSERT INTO analysis_reports
-                        (user_id, title, filename, disk_path, size_bytes, created_at, updated_at)
-                    VALUES (%s, %s, %s, %s, %s, NOW(), NOW())
-                    RETURNING id, user_id, title, filename, disk_path, size_bytes,
-                              share_token, created_at, updated_at
-                    """,
-                    (user_id, title.strip(), filename, disk_path, size_bytes),
-                )
-                row = cur.fetchone()
-        conn.close()
-        logger.info(f"Report saved: {filename} for user {user_id}")
-        return AnalysisReport(*row)
-    except Exception as e:
-        logger.error(f"save_report error: {e}")
+        with open(p, "rb") as fh:
+            resp = request(
+                "POST", "/reports", token=token,
+                files={"pdf": (name, fh, "application/pdf")},
+                data={"title": title.strip()},
+            )
+    except (OSError, ApiError) as e:
+        logger.error(f"upload_report error: {e}")
         return "reports.error_save_failed"
 
+    if not resp.ok:
+        logger.error(f"upload_report failed [{resp.status_code}]: {resp.text[:200]}")
+        return "reports.error_save_failed"
 
-def get_user_reports(user_id: int) -> List[AnalysisReport]:
-    """Return all reports for a user, newest first."""
-    try:
-        conn = get_connection()
-        with conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    SELECT id, user_id, title, filename, disk_path, size_bytes,
-                           share_token, created_at, updated_at
-                    FROM analysis_reports
-                    WHERE user_id = %s
-                    ORDER BY COALESCE(created_at, updated_at, '1970-01-01'::timestamptz) DESC
-                    """,
-                    (user_id,),
-                )
-                rows = cur.fetchall()
-        conn.close()
-        return [AnalysisReport(*row) for row in rows]
-    except Exception as e:
-        logger.error(f"get_user_reports error (user_id={user_id}): {e}")
+    return _from_payload(resp.json().get("report", {}))
+
+
+def get_user_reports(token: str) -> List[AnalysisReport]:
+    """Return all reports for the current user."""
+    if not token:
         return []
-
-
-def delete_report(report_id: int, user_id: int) -> bool:
-    """Delete a report record (does NOT remove the file). Returns True on success."""
     try:
-        conn = get_connection()
-        with conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "DELETE FROM analysis_reports WHERE id = %s AND user_id = %s RETURNING id",
-                    (report_id, user_id),
-                )
-                deleted = cur.fetchone()
-        conn.close()
-        return deleted is not None
-    except Exception as e:
-        logger.error(f"delete_report error: {e}")
+        resp = request("GET", "/reports", token=token)
+    except ApiError as e:
+        logger.error(f"get_user_reports error: {e}")
+        return []
+    if not resp.ok:
+        return []
+    return [_from_payload(r) for r in resp.json().get("reports", [])]
+
+
+def delete_report(token: str, report_id: int) -> bool:
+    """Delete a report (and its file) via API."""
+    try:
+        resp = request("DELETE", f"/reports/{report_id}", token=token)
+    except ApiError:
         return False
+    return resp.ok
 
 
-def toggle_share(report_id: int, user_id: int) -> Optional[str]:
-    """
-    Toggle the share token on/off.
-    Returns the new token if now shared, None if now unshared.
-    """
+def toggle_share(token: str, report_id: int) -> Optional[str]:
+    """Toggle the share token. Returns the new token if now shared, else None."""
     try:
-        conn = get_connection()
-        with conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT share_token FROM analysis_reports WHERE id = %s AND user_id = %s",
-                    (report_id, user_id),
-                )
-                row = cur.fetchone()
-                if row is None:
-                    conn.close()
-                    return None
-                current_token = row[0]
-                new_token = None if current_token is not None else uuid.uuid4().hex
-                cur.execute(
-                    """UPDATE analysis_reports
-                       SET share_token = %s, updated_at = NOW()
-                       WHERE id = %s AND user_id = %s""",
-                    (new_token, report_id, user_id),
-                )
-        conn.close()
-        return new_token
-    except Exception as e:
-        logger.error(f"toggle_share error: {e}")
+        resp = request("POST", f"/reports/{report_id}/share", token=token)
+    except ApiError:
+        return None
+    if not resp.ok:
+        return None
+    body = resp.json()
+    return body.get("token") if body.get("shared") else None
+
+
+def download_report(token: str, report: AnalysisReport, dest_path: Optional[Path] = None) -> Optional[Path]:
+    """Download a report's PDF bytes to dest_path (or a temp file). Returns the local path."""
+    try:
+        resp = request("GET", f"/reports/{report.id}/download", token=token, stream=True)
+    except ApiError as e:
+        logger.error(f"download_report error: {e}")
+        return None
+    if not resp.ok:
+        return None
+
+    if dest_path is None:
+        fd, tmp = tempfile.mkstemp(suffix=".pdf", prefix=f"alas_report_{report.id}_")
+        os.close(fd)
+        dest_path = Path(tmp)
+
+    try:
+        with open(dest_path, "wb") as fh:
+            for chunk in resp.iter_content(chunk_size=64 * 1024):
+                if chunk:
+                    fh.write(chunk)
+    except OSError as e:
+        logger.error(f"download_report write error: {e}")
+        return None
+    return dest_path
+
+
+# ---------------------------------------------------------------------------
+
+def _from_payload(p: dict) -> AnalysisReport:
+    return AnalysisReport(
+        id=int(p["id"]),
+        user_id=int(p["user_id"]),
+        title=p.get("title", ""),
+        filename=p.get("filename", ""),
+        size_bytes=int(p.get("size_bytes") or 0),
+        share_token=p.get("share_token"),
+        created_at=_parse_dt(p.get("created_at")),
+        updated_at=_parse_dt(p.get("updated_at")),
+    )
+
+
+def _parse_dt(s: Optional[str]) -> Optional[datetime.datetime]:
+    if not s:
+        return None
+    try:
+        return datetime.datetime.fromisoformat(s.replace("Z", "+00:00"))
+    except ValueError:
         return None

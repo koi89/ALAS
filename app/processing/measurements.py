@@ -130,7 +130,7 @@ def measure_3d_distance(point_a: Tuple[float, float, float],
     dist_2d = np.sqrt(dx**2 + dy**2)
     dist_3d = np.sqrt(dx**2 + dy**2 + dz**2)
     slope_pct = (dz / dist_2d * 100) if dist_2d > 0 else 0
-    slope_deg = np.degrees(np.arctan2(abs(dz), dist_2d))
+    slope_deg = np.degrees(np.arctan2(dz, dist_2d))
 
     return {
         "distance_3d": float(dist_3d),
@@ -208,8 +208,10 @@ def calculate_volume(raster: RasterLayer, reference_z: float,
             raise ValueError("Raster without extent.")
         xmin, ymin, xmax, ymax = bounds
         rows, cols = data.shape
-        xs = np.linspace(xmin, xmax, cols)
-        ys = np.linspace(ymax, ymin, rows)
+        res_x = (xmax - xmin) / cols
+        res_y = (ymax - ymin) / rows
+        xs = np.linspace(xmin + res_x/2, xmax - res_x/2, cols)
+        ys = np.linspace(ymax - res_y/2, ymin + res_y/2, rows)
         xx, yy = np.meshgrid(xs, ys)
         points = np.column_stack([xx.ravel(), yy.ravel()])
         path = MplPath(polygon)
@@ -220,8 +222,10 @@ def calculate_volume(raster: RasterLayer, reference_z: float,
             raise ValueError("Raster without extent.")
         xmin, ymin, xmax, ymax = bounds
         rows, cols = data.shape
-        xs = np.linspace(xmin, xmax, cols)
-        ys = np.linspace(ymax, ymin, rows)
+        res_x = (xmax - xmin) / cols
+        res_y = (ymax - ymin) / rows
+        xs = np.linspace(xmin + res_x/2, xmax - res_x/2, cols)
+        ys = np.linspace(ymax - res_y/2, ymin + res_y/2, rows)
         xx, yy = np.meshgrid(xs, ys)
         mask = data != raster.nodata
 

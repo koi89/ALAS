@@ -108,8 +108,8 @@ def calculate_curvature(dtm: RasterLayer,
 
 def calculate_roughness(dtm: RasterLayer, window: int = 3) -> RasterLayer:
     """
-    Calculates terrain roughness index (TRI).
-    TRI = mean difference between a cell and its neighbors.
+    Calculates terrain roughness index (Riley TRI).
+    TRI = sqrt(sum of squared differences between a cell and its neighbors).
     """
     logger.info(f"Calculating roughness (window={window})...")
     from scipy.ndimage import generic_filter
