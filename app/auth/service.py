@@ -1,26 +1,20 @@
 """
 ALAS — Auth Service
-register, login, verify_session, logout against the Laravel backend's NeonDB.
-
-Schema is owned by the Laravel app at C:\\Users\\Usuario\\Desktop\\sexo\\web\\ALAS_WEB2.
-This module reads/writes those tables directly.
+Talks to the Laravel desktop API for register/login/session/subscription.
+No direct DB access.
 """
 
 from __future__ import annotations
-import re
-import uuid
+
 import datetime
+import re
 from dataclasses import dataclass
 from typing import Optional
 
-import bcrypt
-
-from app.auth.db import get_connection
+from app.auth.api_client import ApiError, request
 from app.logger import get_logger
 
 logger = get_logger("auth.service")
-
-_SESSION_DAYS = 30
 
 
 @dataclass
@@ -29,7 +23,7 @@ class User:
     full_name: str
     email: str
     phone: Optional[str]
-    created_at: datetime.datetime
+    created_at: Optional[datetime.datetime]
 
 
 @dataclass
@@ -46,215 +40,135 @@ class Subscription:
 # ---------------------------------------------------------------------------
 
 def register(full_name: str, email: str, phone: str, password: str) -> User | str:
-    """
-    Create a new user in the Laravel users table.
-    Returns User on success, error string on failure.
-    """
+    """Create a new user via Laravel API. Returns User on success, error code on failure."""
     if not _valid_email(email):
         return "auth.error_invalid_email"
 
-    pw_hash = _hash_password(password)
-    name = full_name.strip()
-
     try:
-        conn = get_connection()
-        with conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    INSERT INTO users
-                        (name, full_name, email, phone, password, created_at, updated_at)
-                    VALUES (%s, %s, %s, %s, %s, NOW(), NOW())
-                    RETURNING id, full_name, email, phone, created_at
-                    """,
-                    (name, name, email.strip().lower(), phone.strip() or None, pw_hash),
-                )
-                row = cur.fetchone()
-        conn.close()
-        logger.info(f"User registered: {email}")
-        return User(*row)
-    except Exception as e:
-        err = str(e)
-        if "unique" in err.lower() or "duplicate" in err.lower():
-            return "auth.error_email_taken"
-        logger.error(f"Register error: {e}")
+        resp = request("POST", "/auth/register", json_body={
+            "full_name": full_name.strip(),
+            "email":     email.strip().lower(),
+            "phone":     phone.strip() or None,
+            "password":  password,
+        })
+    except ApiError:
         return "auth.error_processing_failed"
+
+    if resp.status_code == 422:
+        body = _safe_json(resp)
+        errs = body.get("errors", {}) if isinstance(body, dict) else {}
+        if "email" in errs:
+            return "auth.error_email_taken"
+        return "auth.error_invalid_email"
+    if not resp.ok:
+        logger.error(f"register failed [{resp.status_code}]: {resp.text[:200]}")
+        return "auth.error_processing_failed"
+
+    return _user_from_payload(resp.json().get("user", {}))
 
 
 def login(email: str, password: str, remember_me: bool = False) -> tuple[User, str | None] | str:
-    """
-    Verify credentials against the Laravel users table.
-    Returns (User, token_or_None) on success, error string on failure.
-    """
+    """Verify credentials via Laravel API. Returns (User, token_or_None) or error code."""
     try:
-        conn = get_connection()
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT id, COALESCE(full_name, name) AS full_name, email, phone,
-                       password, created_at
-                FROM users
-                WHERE email = %s
-                """,
-                (email.strip().lower(),),
-            )
-            row = cur.fetchone()
-        conn.close()
-    except Exception as e:
-        logger.error(f"Login DB error: {e}")
+        resp = request("POST", "/auth/login", json_body={
+            "email":       email.strip().lower(),
+            "password":    password,
+            "remember_me": bool(remember_me),
+        })
+    except ApiError:
         return "auth.error_processing_failed"
 
-    if row is None:
+    if resp.status_code in (401, 422):
         return "auth.error_invalid_credentials"
+    if not resp.ok:
+        logger.error(f"login failed [{resp.status_code}]: {resp.text[:200]}")
+        return "auth.error_processing_failed"
 
-    user_id, full_name, db_email, phone, pw_hash, created_at = row
-    if not _verify_password(password, pw_hash):
-        return "auth.error_invalid_credentials"
-
-    user = User(user_id, full_name, db_email, phone, created_at)
-    token = None
-
-    if remember_me:
-        token = _create_session(user_id)
-
-    logger.info(f"User logged in: {email}")
+    body = resp.json()
+    user = _user_from_payload(body.get("user", {}))
+    token = body.get("token")
     return user, token
 
 
 def verify_session(token: str) -> Optional[User]:
-    """Return User if token exists and hasn't expired, else None."""
+    """Return User if token is valid, else None."""
     if not token:
         return None
     try:
-        conn = get_connection()
-        with conn:
-            with conn.cursor() as cur:
-                _ensure_desktop_sessions_table(cur)
-                cur.execute(
-                    """
-                    SELECT u.id, COALESCE(u.full_name, u.name), u.email, u.phone, u.created_at
-                    FROM desktop_sessions s
-                    JOIN users u ON u.id = s.user_id
-                    WHERE s.token = %s AND s.expires_at > NOW()
-                    """,
-                    (token,),
-                )
-                row = cur.fetchone()
-        conn.close()
-        if row:
-            return User(*row)
-    except Exception as e:
-        logger.warning(f"Session verify error: {e}")
-    return None
+        resp = request("GET", "/auth/me", token=token)
+    except ApiError:
+        return None
+    if not resp.ok:
+        return None
+    return _user_from_payload(resp.json().get("user", {}))
 
 
-def get_subscription(user_id: int) -> Optional[Subscription]:
-    """Return the most relevant subscription row for the user, or None."""
-    try:
-        conn = get_connection()
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT p.name, p.billing_period, s.status,
-                       s.current_period_end, s.trial_ends_at
-                FROM subscriptions s
-                JOIN plans p ON p.id = s.plan_id
-                WHERE s.user_id = %s
-                ORDER BY
-                    CASE s.status
-                        WHEN 'active'   THEN 1
-                        WHEN 'trialing' THEN 2
-                        WHEN 'lifetime' THEN 3
-                        ELSE 4
-                    END,
-                    s.created_at DESC
-                LIMIT 1
-                """,
-                (user_id,),
-            )
-            row = cur.fetchone()
-        conn.close()
-        if row:
-            return Subscription(*row)
-    except Exception as e:
-        logger.warning(f"get_subscription error: {e}")
-    return None
-
-
-def logout(token: str):
-    """Delete the desktop session row from DB."""
+def get_subscription(token: str) -> Optional[Subscription]:
+    """Return current user's subscription, or None."""
     if not token:
-        return
+        return None
     try:
-        conn = get_connection()
-        with conn:
-            with conn.cursor() as cur:
-                _ensure_desktop_sessions_table(cur)
-                cur.execute("DELETE FROM desktop_sessions WHERE token = %s", (token,))
-        conn.close()
-        logger.info("Session deleted")
-    except Exception as e:
-        logger.warning(f"Logout error: {e}")
-
-
-# ---------------------------------------------------------------------------
-# Internal helpers
-# ---------------------------------------------------------------------------
-
-def _create_session(user_id: int) -> str:
-    token = uuid.uuid4().hex
-    expires = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=_SESSION_DAYS)
-    conn = get_connection()
-    with conn:
-        with conn.cursor() as cur:
-            _ensure_desktop_sessions_table(cur)
-            cur.execute(
-                "INSERT INTO desktop_sessions (user_id, token, expires_at) VALUES (%s, %s, %s)",
-                (user_id, token, expires),
-            )
-    conn.close()
-    return token
-
-
-def _ensure_desktop_sessions_table(cur):
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS desktop_sessions (
-            id          BIGSERIAL PRIMARY KEY,
-            user_id     BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-            token       VARCHAR(64) NOT NULL UNIQUE,
-            expires_at  TIMESTAMPTZ NOT NULL,
-            created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        )
-        """
+        resp = request("GET", "/auth/subscription", token=token)
+    except ApiError:
+        return None
+    if not resp.ok:
+        return None
+    s = resp.json().get("subscription")
+    if not s:
+        return None
+    return Subscription(
+        plan_name=s["plan_name"],
+        billing_period=s["billing_period"],
+        status=s["status"],
+        current_period_end=_parse_dt(s.get("current_period_end")),
+        trial_ends_at=_parse_dt(s.get("trial_ends_at")),
     )
 
 
-def _hash_password(password: str) -> str:
-    """
-    Hash a password with bcrypt and return it with the $2y$ prefix Laravel uses.
-    PHP's password_verify accepts $2a/$2b/$2x/$2y interchangeably, and Python's
-    bcrypt.checkpw does the same, so this is a cosmetic convention to match
-    what Laravel writes itself.
-    """
-    h = bcrypt.hashpw(password.encode(), bcrypt.gensalt(rounds=12)).decode()
-    if h.startswith("$2b$"):
-        h = "$2y$" + h[4:]
-    return h
-
-
-def _verify_password(password: str, stored_hash: str) -> bool:
-    if not stored_hash:
-        return False
-    # Normalize Laravel's $2y$ to Python bcrypt's $2b$ for the checkpw call.
-    h = stored_hash
-    if h.startswith("$2y$"):
-        h = "$2b$" + h[4:]
+def logout(token: str):
+    if not token:
+        return
     try:
-        return bcrypt.checkpw(password.encode(), h.encode())
-    except (ValueError, TypeError):
-        return False
+        request("POST", "/auth/logout", token=token)
+    except ApiError as e:
+        logger.warning(f"logout: {e}")
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _user_from_payload(p: dict) -> User:
+    return User(
+        id=int(p["id"]),
+        full_name=p.get("full_name") or p.get("name") or "",
+        email=p.get("email", ""),
+        phone=p.get("phone"),
+        created_at=_parse_dt(p.get("created_at")),
+    )
+
+
+def _parse_dt(s: Optional[str]) -> Optional[datetime.datetime]:
+    if not s:
+        return None
+    try:
+        return datetime.datetime.fromisoformat(s.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _safe_json(resp) -> dict:
+    try:
+        return resp.json()
+    except ValueError:
+        return {}
 
 
 def _valid_email(email: str) -> bool:
     return bool(re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email.strip()))
+
+
+# Backwards-compat alias: old call sites pass user_id; new API uses token.
+# Kept here so any stray import keeps working — prefer get_subscription(token).
+def get_subscription_by_id(_user_id: int) -> None:  # pragma: no cover
+    return None

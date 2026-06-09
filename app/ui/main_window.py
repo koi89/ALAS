@@ -484,7 +484,7 @@ class MainWindow(QMainWindow):
             return
         if not hasattr(self, "_reports_dialog") or self._reports_dialog is None:
             from app.ui.dialogs.reports_dialog import ReportsDialog
-            self._reports_dialog = ReportsDialog(self._current_user, self)
+            self._reports_dialog = ReportsDialog(self._current_user, self._session_token, self)
         self._reports_dialog.show_and_raise()
 
     def _show_reproject_dialog(self):
@@ -655,8 +655,13 @@ class MainWindow(QMainWindow):
         super().showEvent(event)
         if not self._login_shown:
             self._login_shown = True
-            if not self._current_user:
-                QTimer.singleShot(0, self._ensure_logged_in)
+            QTimer.singleShot(0, self._ensure_gated)
+
+    def _ensure_gated(self):
+        if not self._current_user:
+            self._ensure_logged_in()
+        if self._current_user:
+            self._ensure_licensed()
 
     def _ensure_logged_in(self):
         from app.ui.dialogs.login_dialog import LoginDialog
@@ -666,17 +671,34 @@ class MainWindow(QMainWindow):
             return
         self._current_user = dlg.user
         self._session_token = dlg.session_token
-        if self._session_token:
+        if self._session_token and getattr(dlg, "persist_token", False):
             self.preferences.set("session_token", self._session_token)
         self._user_btn.setIcon(QIcon(self._make_avatar_pixmap(self._current_user.full_name)))
         self._user_btn.setIconSize(QSize(26, 26))
         self._user_btn.setVisible(True)
 
+    def _ensure_licensed(self):
+        from app.auth.license_service import verify_license, get_machine_id
+        from app.ui.dialogs.license_dialog import LicenseDialog
+
+        if not self._session_token:
+            QMessageBox.critical(self, "ALAS", tr("license.error_processing_failed"))
+            QApplication.quit()
+            return
+
+        machine_id = get_machine_id()
+        if verify_license(self._session_token, machine_id):
+            return
+
+        dlg = LicenseDialog(self._session_token, self)
+        if dlg.exec() != QDialog.DialogCode.Accepted or dlg.license is None:
+            QApplication.quit()
+
     def _show_user_panel(self):
         if not self._current_user:
             return
         from app.ui.dialogs.user_panel import UserPanelDialog
-        panel = UserPanelDialog(self._current_user, self)
+        panel = UserPanelDialog(self._current_user, self._session_token, self)
         panel.logout_requested.connect(self._on_logout)
         panel.exec()
 

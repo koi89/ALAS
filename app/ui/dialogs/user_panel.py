@@ -67,10 +67,10 @@ class UserPanelDialog(QDialog):
 
     logout_requested = pyqtSignal()
 
-    def __init__(self, user, parent=None):
+    def __init__(self, user, session_token: str | None = None, parent=None):
         super().__init__(parent)
         self._user = user
-        self._sub = auth_service.get_subscription(user.id)
+        self._sub = auth_service.get_subscription(session_token) if session_token else None
         self.setWindowTitle(tr("auth.my_account"))
         self.setFixedWidth(340)
         self.setWindowFlags(
