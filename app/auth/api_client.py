@@ -7,6 +7,7 @@ Reads ALAS_API_BASE_URL from .env (default: http://localhost:8000).
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 from typing import Any, Optional
 
@@ -17,7 +18,17 @@ from app.logger import get_logger
 
 logger = get_logger("auth.api_client")
 
-load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+# Look for .env next to the executable (frozen build) and in the project root (dev).
+# First match wins; later loads do not override existing env vars.
+_env_candidates = []
+if getattr(sys, "frozen", False):
+    _env_candidates.append(Path(sys.executable).parent / ".env")
+_env_candidates.append(Path(__file__).resolve().parents[2] / ".env")
+for _p in _env_candidates:
+    if _p.is_file():
+        load_dotenv(_p)
+        logger.info(f"Loaded .env from {_p}")
+        break
 
 _BASE_URL = os.getenv("ALAS_API_BASE_URL", "http://localhost:8000").rstrip("/")
 _TIMEOUT = float(os.getenv("ALAS_API_TIMEOUT", "15"))
