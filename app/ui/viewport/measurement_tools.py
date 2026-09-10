@@ -86,7 +86,7 @@ class MeasurementTools:
             actor.GetProperty().SetLighting(False)
             actor.GetProperty().SetAmbient(1.0)
         except Exception:
-            pass
+            logger.debug("Could not set actor lighting properties", exc_info=True)
         self._temp_actors.append(actor)
         return actor
 
@@ -121,7 +121,7 @@ class MeasurementTools:
             try:
                 self._plotter.remove_actor(actor)
             except Exception:
-                pass
+                logger.debug("Could not remove temp measurement actor", exc_info=True)
         self._temp_actors = []
         for attr in ("_area_markers_actor", "_area_lines_actor"):
             actor = getattr(self, attr, None)
@@ -129,7 +129,7 @@ class MeasurementTools:
                 try:
                     self._plotter.remove_actor(actor)
                 except Exception:
-                    pass
+                    logger.debug(f"Could not remove actor '{attr}'", exc_info=True)
                 setattr(self, attr, None)
         self._plotter.render()
 
@@ -302,7 +302,7 @@ class MeasurementTools:
                 if self._volume_solid_actor in self._temp_actors:
                     self._temp_actors.remove(self._volume_solid_actor)
             except Exception:
-                pass
+                logger.debug("Could not remove volume solid actor", exc_info=True)
             self._volume_solid_actor = None
         self._plotter.render()
 
@@ -367,7 +367,7 @@ class MeasurementTools:
                     try:
                         style_ref.RemoveObserver(obs_id)
                     except Exception:
-                        pass
+                        logger.debug("Could not remove area observer", exc_info=True)
                     setattr(self, obs_attr, None)
             self._area_style_ref = None
 
@@ -379,7 +379,7 @@ class MeasurementTools:
                     try:
                         wp_style.RemoveObserver(obs_id)
                     except Exception:
-                        pass
+                        logger.debug("Could not remove waypoint observer", exc_info=True)
                     setattr(self, obs_attr, None)
             self._wp_style_ref = None
 
@@ -390,7 +390,7 @@ class MeasurementTools:
             try:
                 self._plotter.clear_measurements()
             except Exception:
-                pass
+                logger.debug("Could not clear plotter measurements", exc_info=True)
             self._measuring_widget = None
 
         self._picking_callback = None

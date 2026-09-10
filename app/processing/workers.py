@@ -5,6 +5,10 @@ Base classes to run heavy tasks in separate threads.
 
 from PyQt6.QtCore import QObject, QRunnable, pyqtSignal, pyqtSlot
 
+from app.logger import get_logger
+
+logger = get_logger("processing.workers")
+
 
 class ProcessingWorkerSignals(QObject):
     """Signals emitted by processing workers."""
@@ -34,6 +38,7 @@ class ProcessingWorker(QRunnable):
             result = self.func(*self.args, **self.kwargs)
             self.signals.result.emit(result)
         except Exception as e:
+            logger.exception(f"Worker {getattr(self.func, '__name__', self.func)} failed")
             self.signals.error.emit(str(e))
         finally:
             self.signals.finished.emit()

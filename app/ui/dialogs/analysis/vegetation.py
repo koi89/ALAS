@@ -34,33 +34,35 @@ class VegetationResultsWindow(AnalysisResultsWindow):
 
     def _render_tree_tops(self, tree_tops: "np.ndarray"):
         """Render tree top locations as a scatter image using matplotlib."""
-        import numpy as np
-        import matplotlib.pyplot as plt
         import io
+        from matplotlib.backends.backend_agg import FigureCanvasAgg
+        from matplotlib.figure import Figure
         from PyQt6.QtGui import QImage, QPixmap
         from PyQt6.QtCore import Qt
 
-        fig, ax = plt.subplots(figsize=(8, 6), facecolor="#1a1a2e")
+        fig = Figure(figsize=(8, 6), facecolor="#1a1a2e")
+        FigureCanvasAgg(fig)
+        ax = fig.add_subplot()
         ax.set_facecolor("#1a1a2e")
 
         if len(tree_tops) > 0:
             xs, ys, heights = tree_tops[:, 0], tree_tops[:, 1], tree_tops[:, 2]
             sc = ax.scatter(xs, ys, c=heights, cmap="YlGn", s=6,
                             vmin=heights.min(), vmax=heights.max(), alpha=0.85)
-            cbar = plt.colorbar(sc, ax=ax, pad=0.02)
+            cbar = fig.colorbar(sc, ax=ax, pad=0.02)
             cbar.set_label("Height (m)", color="white", fontsize=9)
             cbar.ax.yaxis.set_tick_params(color="white")
-            plt.setp(cbar.ax.yaxis.get_ticklabels(), color="white")
+            for ticklabel in cbar.ax.yaxis.get_ticklabels():
+                ticklabel.set_color("white")
 
         ax.set_title(f"Tree Tops  (n={len(tree_tops)})", color="white", fontsize=11)
         ax.tick_params(colors="white", labelsize=7)
         for spine in ax.spines.values():
             spine.set_edgecolor("#444")
-        plt.tight_layout(pad=0.4)
+        fig.tight_layout(pad=0.4)
 
         buf = io.BytesIO()
         fig.savefig(buf, format="png", dpi=100, facecolor=fig.get_facecolor())
-        plt.close(fig)
         buf.seek(0)
         data = buf.read()
 

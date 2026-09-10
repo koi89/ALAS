@@ -350,7 +350,7 @@ class MainWindow(QMainWindow):
                 from pyproj import CRS
                 pc.crs_wkt = CRS.from_epsg(epsg).to_wkt()
             except Exception:
-                pass
+                logger.warning(f"Could not build CRS WKT from EPSG:{epsg}", exc_info=True)
             self._update_crs_display(epsg)
             self.preferences.last_crs = epsg
 
@@ -658,10 +658,12 @@ class MainWindow(QMainWindow):
             QTimer.singleShot(0, self._ensure_gated)
 
     def _ensure_gated(self):
-        if not self._current_user:
-            self._ensure_logged_in()
-        if self._current_user:
-            self._ensure_licensed()
+        # OFFLINE MODE: backend gating disabled — no login / no license check.
+        # if not self._current_user:
+        #     self._ensure_logged_in()
+        # if self._current_user:
+        #     self._ensure_licensed()
+        return
 
     def _ensure_logged_in(self):
         from app.ui.dialogs.login_dialog import LoginDialog
@@ -730,7 +732,7 @@ class MainWindow(QMainWindow):
                 from PyQt6.QtCore import QByteArray
                 self.restoreGeometry(QByteArray.fromHex(geom.encode()))
             except Exception:
-                pass
+                logger.debug("Could not restore saved window geometry", exc_info=True)
 
     def closeEvent(self, event):
         self.preferences.set("window_geometry",

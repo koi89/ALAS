@@ -186,7 +186,7 @@ class PointCloudData:
                     np.array(las.blue, dtype=np.uint16),
                 ])
         except Exception:
-            pass
+            logger.debug("Could not read RGB channels from LAS", exc_info=True)
 
         # GPS time
         if hasattr(las, "gps_time"):
@@ -236,7 +236,7 @@ class PointCloudData:
                 crs = CRS.from_wkt(self.crs_wkt)
                 self.crs_epsg = crs.to_epsg()
             except Exception:
-                pass
+                logger.warning("Could not derive EPSG code from CRS WKT", exc_info=True)
 
     def _parse_epsg_from_wkt(self, wkt: str):
         """Try to extract EPSG code from WKT."""

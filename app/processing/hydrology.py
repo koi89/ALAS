@@ -35,8 +35,9 @@ def condition_dem(dtm: RasterLayer) -> RasterLayer:
     """
     logger.info("Conditioning DTM for hydrology...")
 
-    grid, path = _get_grid_and_path(dtm)
+    grid, path, is_temp = _get_grid_and_path(dtm)
     dem = grid.read_raster(path)
+    _cleanup_temp(path, is_temp)
 
     inflated = _condition_raw(grid, dem)
 
@@ -277,8 +278,9 @@ def detect_ponding_zones(dtm: RasterLayer,
     """
     logger.info("Detecting ponding zones...")
 
-    grid, path = _get_grid_and_path(dtm)
+    grid, path, is_temp = _get_grid_and_path(dtm)
     dem = grid.read_raster(path)
+    _cleanup_temp(path, is_temp)
 
     # Original DTM as array
     original = np.array(dem, dtype=np.float32)
@@ -318,18 +320,31 @@ def _get_grid_and_path(dtm: RasterLayer):
 
     pysheds works internally with GeoTIFF files.
     If the RasterLayer has no disk path, a temporary one is written.
+
+    Returns:
+        (grid, path, is_temp) — if is_temp, the caller must unlink the path
+        once the raster has been read (use _cleanup_temp).
     """
     from pysheds.grid import Grid
 
     if dtm.file_path and os.path.isfile(dtm.file_path):
-        return Grid.from_raster(dtm.file_path), dtm.file_path
+        return Grid.from_raster(dtm.file_path), dtm.file_path, False
 
     # Write to temporary file
     tmp = tempfile.NamedTemporaryFile(suffix=".tif", delete=False)
     tmp.close()
     dtm.to_geotiff(tmp.name)
     logger.debug(f"DTM exported to temp: {tmp.name}")
-    return Grid.from_raster(tmp.name), tmp.name
+    return Grid.from_raster(tmp.name), tmp.name, True
+
+
+def _cleanup_temp(path: str, is_temp: bool):
+    if not is_temp:
+        return
+    try:
+        os.unlink(path)
+    except OSError:
+        logger.debug(f"Could not remove temp file: {path}")
 
 
 def _condition_raw(grid, dem):
@@ -358,15 +373,9 @@ def _prepare_dem(dtm: RasterLayer, conditioned: Optional[RasterLayer] = None):
     from pysheds.grid import Grid
 
     source = conditioned if conditioned is not None else dtm
-    grid, path = _get_grid_and_path(source)
+    grid, path, is_temp = _get_grid_and_path(source)
     dem = grid.read_raster(path)
-
-    # Clean up temp file if one was written (source has no valid on-disk path)
-    if not (source.file_path and os.path.isfile(source.file_path)):
-        try:
-            os.unlink(path)
-        except OSError:
-            logger.debug(f"Could not remove temp file: {path}")
+    _cleanup_temp(path, is_temp)
 
     if conditioned is None:
         dem = _condition_raw(grid, dem)

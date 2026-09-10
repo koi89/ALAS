@@ -184,7 +184,7 @@ class FigureManager:
                 try:
                     style.RemoveObserver(obs)
                 except Exception:
-                    pass
+                    logger.debug("Could not remove drag observer", exc_info=True)
                 setattr(self, attr, None)
         self._drag_style_ref = None
         self._drag_observers_active = False

@@ -53,7 +53,7 @@ class AnnotationManager:
                 try:
                     self._plotter.remove_actor(a)
                 except Exception:
-                    pass
+                    logger.debug("Could not remove annotation actor", exc_info=True)
         self._plotter.render()
 
     def clear(self) -> None:

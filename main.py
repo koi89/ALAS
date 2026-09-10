@@ -27,6 +27,36 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 
+def _install_excepthook(logger):
+    """Log unhandled exceptions and show a dialog (console=False hides them otherwise)."""
+    import threading
+    import traceback
+
+    def hook(exc_type, exc_value, exc_tb):
+        if issubclass(exc_type, KeyboardInterrupt):
+            sys.__excepthook__(exc_type, exc_value, exc_tb)
+            return
+        text = "".join(traceback.format_exception(exc_type, exc_value, exc_tb))
+        logger.critical("Unhandled exception:\n%s", text)
+        try:
+            from PyQt6.QtWidgets import QApplication, QMessageBox
+            if QApplication.instance() is not None:
+                QMessageBox.critical(
+                    None,
+                    "ALAS — Unexpected error",
+                    f"{exc_type.__name__}: {exc_value}\n\n"
+                    "Details have been written to the log file.",
+                )
+        except Exception:
+            pass
+
+    # A custom sys.excepthook also stops PyQt6 from calling qFatal() on slot exceptions.
+    sys.excepthook = hook
+    threading.excepthook = lambda args: hook(
+        args.exc_type, args.exc_value, args.exc_traceback
+    )
+
+
 def main():
     """Start the ALAS application."""
     # Import Qt first
@@ -109,6 +139,7 @@ def main():
     # --- Setup logging ---
     from app.logger import setup_logging
     logger = setup_logging()
+    _install_excepthook(logger)
 
     # --- Apply saved language before any tr() calls ---
     from app.core.project import UserPreferences
@@ -124,25 +155,46 @@ def main():
     )
     app.processEvents()
 
-    # --- Check saved session (skip login if token is still valid) ---
-    from app.auth.service import verify_session
-    _saved_token = _startup_prefs.get("session_token")
-    _auto_user = verify_session(_saved_token) if _saved_token else None
-    _session_token = _saved_token if _auto_user else None
+    # --- Check saved session in the background (network call; keep GUI responsive) ---
+    # OFFLINE MODE: backend calls disabled; skip session verification.
+    # import threading
+    # from app.auth.service import verify_session
+    # _saved_token = _startup_prefs.get("session_token")
+    # _verify = {"done": not _saved_token, "user": None}
+    #
+    # if _saved_token:
+    #     def _verify_in_background():
+    #         try:
+    #             _verify["user"] = verify_session(_saved_token)
+    #         finally:
+    #             _verify["done"] = True
+    #     threading.Thread(target=_verify_in_background, daemon=True).start()
+    _saved_token = None
+    _verify = {"done": True, "user": None}
 
-    # --- Create main window (shows login modal on first paint if not authed) ---
-    from app.ui.main_window import MainWindow
-    window = MainWindow(user=_auto_user, session_token=_session_token)
+    _refs = {}  # keeps the main window alive after _finish_startup returns
 
-    splash.showMessage(
-        tr("splash.ready"),
-        Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignLeft,
-        QColor("#555555")
-    )
-    app.processEvents()
+    def _finish_startup():
+        if not _verify["done"]:
+            QTimer.singleShot(100, _finish_startup)
+            return
 
-    # --- Show window, close splash ---
-    QTimer.singleShot(800, lambda: _show_window(window, splash))
+        _auto_user = _verify["user"]
+        from app.ui.main_window import MainWindow
+        window = MainWindow(
+            user=_auto_user,
+            session_token=_saved_token if _auto_user else None,
+        )
+        _refs["window"] = window
+
+        splash.showMessage(
+            tr("splash.ready"),
+            Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignLeft,
+            QColor("#555555")
+        )
+        QTimer.singleShot(800, lambda: _show_window(window, splash))
+
+    QTimer.singleShot(0, _finish_startup)
 
     sys.exit(app.exec())
 

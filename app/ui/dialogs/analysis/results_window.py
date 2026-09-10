@@ -155,7 +155,7 @@ class AnalysisResultsWindow(QMainWindow):
             try:
                 stats = raster_layer.statistics()
             except Exception:
-                pass
+                logger.debug(f"Could not compute statistics for '{layer_type}'", exc_info=True)
         elif isinstance(raster_layer, np.ndarray):
             # For point arrays like tree_tops (N, 3)
             try:
@@ -168,7 +168,7 @@ class AnalysisResultsWindow(QMainWindow):
                         "Mean height (m)": float(np.mean(arr[:, 2])),
                     }
             except Exception:
-                pass
+                logger.debug(f"Could not compute array stats for '{layer_type}'", exc_info=True)
         return stats
 
     # ------------------------------------------------------------------
@@ -191,7 +191,7 @@ class AnalysisResultsWindow(QMainWindow):
         try:
             QMainWindow.__init__(helper, None)
         except Exception:
-            pass
+            logger.debug("Could not init helper window for PDF render", exc_info=True)
 
         for layer_type, raster_layer in results.items():
             img_path = None
@@ -208,20 +208,20 @@ class AnalysisResultsWindow(QMainWindow):
             try:
                 stats = helper._collect_layer_stats(layer_type, raster_layer)
             except Exception:
-                pass
+                logger.debug(f"Could not collect stats for '{layer_type}'", exc_info=True)
 
             legend = ""
             try:
                 raw = helper._get_legend_text(layer_type, raster_layer)
                 legend = re.sub(r"<[^>]+>", "", raw)
             except Exception:
-                pass
+                logger.debug(f"Could not build legend for '{layer_type}'", exc_info=True)
 
             pdf_data[layer_type] = {"image": img_path, "legend": legend, "stats": stats}
 
         try:
             helper.deleteLater()
         except Exception:
-            pass
+            logger.debug("Could not delete PDF helper window", exc_info=True)
 
         return pdf_data, temp_dir

@@ -289,7 +289,7 @@ class Viewport3D(QWidget):
             try:
                 self.plotter.remove_actor(self._current_actors[name])
             except Exception:
-                pass
+                logger.debug(f"Could not remove actor '{name}'", exc_info=True)
             del self._current_actors[name]
 
     def remove_layer(self, name: str):
@@ -348,7 +348,7 @@ class Viewport3D(QWidget):
                 prop = actor.GetProperty()
                 prop.SetPointSize(size)
             except Exception:
-                pass
+                logger.debug(f"Could not set point size on actor '{name}'", exc_info=True)
         self.plotter.render()
 
     # ------------------------------------------------------------------

@@ -102,7 +102,7 @@ def reproject(pc: PointCloudData, source_epsg: int,
             from pyproj import CRS
             result.crs_wkt = CRS.from_epsg(target_epsg).to_wkt()
         except Exception:
-            pass
+            logger.warning(f"Could not build CRS WKT from EPSG:{target_epsg}", exc_info=True)
         return result
 
     finally:

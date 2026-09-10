@@ -99,7 +99,7 @@ def _scene_bounds(actors):
             if all(abs(v) < 1e15 for v in b):
                 bounds_list.append(b)
         except Exception:
-            pass
+            logger.debug("Could not read actor bounds", exc_info=True)
     if not bounds_list:
         return None
     xmin = min(b[0] for b in bounds_list)
